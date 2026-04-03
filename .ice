@@ -1,0 +1,3 @@
+
+run:
+  odin run src
