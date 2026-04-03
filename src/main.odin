@@ -98,9 +98,9 @@ main :: proc() {
 	}
 	// parse the args
 	if len(os.args) < 2 {
-		fmt.println("Options:")
+		fmt.println("Usage:")
 		for i := len(runnables_list_reverse) - 1; i >= 0; i -= 1 {
-			fmt.printfln("- %v", runnables_list_reverse[i])
+			fmt.printfln("- ice %v", runnables_list_reverse[i])
 		}
 		return
 	}
