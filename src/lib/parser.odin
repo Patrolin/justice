@@ -22,31 +22,18 @@ Parser :: struct {
 }
 ASTNode :: struct {
 	using token: Token,
-	using _:     struct #raw_union {
-		user_data: rawptr,
-		int:       int,
-		str:       string,
-		value:     ^ASTNode,
-		using _:   struct {
-			left, right: ^ASTNode,
-		},
-	},
+	left, right: ^ASTNode,
 }
-#assert(size_of(ASTNode) == 40)
+#assert(size_of(ASTNode) == 48)
 
 Token :: struct {
-	slice: string,
-	type:  TokenType,
+	slice:     string,
+	type:      TokenType,
+	user_data: uintptr `fmt:"-"`,
 }
-#assert(size_of(Token) == 24)
+#assert(size_of(Token) == 32)
 
-ParserProc :: proc(
-	parser: ^Parser,
-	prev_node: ^ASTNode,
-) -> (
-	token: Token,
-	operator_precedence: int,
-)
+ParserProc :: proc(parser: ^Parser, prev_node: ^ASTNode) -> (token: Token, operator_precedence: int)
 
 @(private = "file")
 _parser_eat_token :: #force_inline proc(parser: ^Parser, token: Token) {
@@ -74,9 +61,10 @@ _parse_downwards :: proc(
 	prev_node_unary_tail_is_value := false
 	for parser.keep_going {
 		token, operator_precedence := parser.parser_proc(parser, prev_node)
+		fmt.assertf(operator_precedence != 0, "token: %v, operator_precedence: %v", token, operator_precedence)
 		//fmt.printfln("_parse_downwards: %v, %v", token, operator_precedence)
 		if intrinsics.expect(len(token.slice) == 0 || !parser.keep_going, false) {
-			report_parser_error(parser, "Cannot have token of length 0")
+			report_parser_error(parser, fmt.tprintf("Cannot have token of length 0: %v", token))
 			break
 		}
 		switch OpType(operator_precedence) {
@@ -84,7 +72,7 @@ _parse_downwards :: proc(
 			_parser_eat_token(parser, token)
 		case OpType.Value, OpType.Unary, OpType.LeftBracket:
 			if prev_node_unary_tail_is_value {
-				report_parser_error(parser, "Cannot have two values in a row")
+				report_parser_error(parser, fmt.tprintf("Cannot have two values in a row: %v, %v", prev_node.token, token))
 				break
 			}
 			_parser_eat_token(parser, token)
@@ -93,13 +81,13 @@ _parse_downwards :: proc(
 				parser.bracket_count += 1
 				node = _parse_upwards(parser, -1, allocator = allocator)
 				// right bracket
-				token, operator_precedence := parser.parser_proc(parser, prev_node)
-				if OpType(operator_precedence) != .RightBracket {
+				next_token, next_operator_precedence := parser.parser_proc(parser, prev_node)
+				if OpType(next_operator_precedence) != .RightBracket {
 					report_parser_error(parser, "Unclosed left bracket")
 					break
 				}
 				parser.bracket_count -= 1
-				_parser_eat_token(parser, token)
+				_parser_eat_token(parser, next_token)
 			} else {
 				node = new(ASTNode, allocator = allocator)
 				node.token = token
@@ -120,10 +108,6 @@ _parse_downwards :: proc(
 			break
 		case:
 			// binary
-			if prev_node == nil {
-				report_parser_error(parser, "Cannot have binary op without a value")
-				break
-			}
 			/* NOTE: The full algorithm would be:
 				`if operator_precedence < min_precedence || (operator_precedence == min_precedence && operator_is_left_associative(...)) {}`
 				however right-to-left associativity is confusing, so we're not doing it */
@@ -143,13 +127,7 @@ _parse_downwards :: proc(
 }
 /* parse `A * B + ...` as `[A * B] + ...` */
 @(private = "file")
-_parse_upwards :: proc(
-	parser: ^Parser,
-	min_precedence: int,
-	allocator := context.temp_allocator,
-) -> (
-	prev_node: ^ASTNode,
-) {
+_parse_upwards :: proc(parser: ^Parser, min_precedence: int, allocator := context.temp_allocator) -> (prev_node: ^ASTNode) {
 	for parser.keep_going {
 		//fmt.printfln("_parse_upwards: '%v', %v, %v", parser.str[parser.start:], min_precedence, prev_node)
 		prev_node = _parse_downwards(parser, prev_node, min_precedence, allocator = allocator)
@@ -158,14 +136,7 @@ _parse_upwards :: proc(
 	parser.keep_going = parser.error == "" && parser.start < len(parser.str)
 	return prev_node
 }
-parse :: proc(
-	str: string,
-	parser_proc: ParserProc,
-	allocator := context.temp_allocator,
-) -> (
-	node: ^ASTNode,
-	error: string,
-) {
+parse :: proc(str: string, parser_proc: ParserProc, allocator := context.temp_allocator) -> (node: ^ASTNode, error: string) {
 	parser := Parser {
 		str         = str,
 		start       = 0,
@@ -179,7 +150,7 @@ parse :: proc(
 
 repeat :: proc(str: string, count: int, allocator := context.temp_allocator) -> string {
 	sb := strings.builder_make_none(allocator = allocator)
-	for i in 0 ..< count {
+	for _ in 0 ..< count {
 		fmt.sbprint(&sb, str)
 	}
 	return strings.to_string(sb)
@@ -187,7 +158,7 @@ repeat :: proc(str: string, count: int, allocator := context.temp_allocator) -> 
 print_ast :: proc(node: ^ASTNode, indent: int = 0) {
 	indent_str := repeat(" ", indent)
 	fmt.printfln("%v", node.token)
-	if node.type < 0 {return} /* NOTE: negative node types are used for custom data */
+	if node == nil || node.type < 0 {return} /* NOTE: negative node types are used for unary ops and custom data */
 	if node.left != nil {
 		fmt.printf("%v- ", indent_str)
 		print_ast(node.left, indent + 1)

@@ -1,6 +1,5 @@
 package lib
 import "base:intrinsics"
-import "core:bytes"
 
 // ascii, NOTE: we need to be able to run this on utf8 strings!
 @(private)
