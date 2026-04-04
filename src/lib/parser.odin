@@ -40,9 +40,10 @@ _parser_eat_token :: #force_inline proc(parser: ^Parser, token: Token) {
 	parser.start += len(token.slice)
 	parser.keep_going = parser.start < len(parser.str)
 }
+// TODO: add `file:line:column` prefix to the error
 report_parser_error :: proc(parser: ^Parser, error: string) {
 	parser.keep_going = false
-	if parser.error == "" {parser.error = error}
+	if len(parser.error) == 0 {parser.error = error}
 }
 
 /* parse `A + B * ...` as `A + [B * ...]` */
@@ -61,8 +62,7 @@ _parse_downwards :: proc(
 	prev_node_unary_tail_is_value := false
 	for parser.keep_going {
 		token, operator_precedence := parser.parser_proc(parser, prev_node)
-		fmt.assertf(operator_precedence != 0, "token: %v, operator_precedence: %v", token, operator_precedence)
-		//fmt.printfln("_parse_downwards: %v, %v", token, operator_precedence)
+		fmt.assertf(operator_precedence != 0 || parser.error != "", "token: %v, operator_precedence: %v", token, operator_precedence)
 		if intrinsics.expect(len(token.slice) == 0 || !parser.keep_going, false) {
 			report_parser_error(parser, fmt.tprintf("Cannot have token of length 0: %v", token))
 			break
@@ -129,11 +129,10 @@ _parse_downwards :: proc(
 @(private = "file")
 _parse_upwards :: proc(parser: ^Parser, min_precedence: int, allocator := context.temp_allocator) -> (prev_node: ^ASTNode) {
 	for parser.keep_going {
-		//fmt.printfln("_parse_upwards: '%v', %v, %v", parser.str[parser.start:], min_precedence, prev_node)
 		prev_node = _parse_downwards(parser, prev_node, min_precedence, allocator = allocator)
 	}
 	/* NOTE: reset after right bracket, or binary op with lower precedence */
-	parser.keep_going = parser.error == "" && parser.start < len(parser.str)
+	parser.keep_going = len(parser.error) == 0 && parser.start < len(parser.str)
 	return prev_node
 }
 parse :: proc(str: string, parser_proc: ParserProc, allocator := context.temp_allocator) -> (node: ^ASTNode, error: string) {

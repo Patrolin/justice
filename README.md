@@ -15,9 +15,8 @@ release:
 - `ice <option_name>` - run the selected option
 
 ## Todo list
-- `name := "value"`
-- `$$name` to insert a variable into a command
-- `args += "-foo -bar"` to append arguments with implicit spaces
+- Support `CONSTANT :: "value"`
+- `args += "-foo -bar"` to append arguments into a variable with implicit spaces
 - `if` conditions
 - builtin `OS_WINDOWS`, ...
 - builtin functions for cleaning dirs safely
