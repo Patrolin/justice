@@ -18,7 +18,8 @@ release:
 
 ## Todo list
 - Print error line in config on error
-- `args += "-foo -bar"` to append arguments into a variable with implicit spaces
-- `if` conditions
 - builtin `OS_WINDOWS`, ...
+- `if` conditions
+- builtin `ARGS` from `ice run -- ..ARGS`
+- `args += "-foo -bar"` to append arguments into a variable with implicit spaces
 - builtin functions for cleaning dirs safely
