@@ -1,7 +1,7 @@
-RELEASE_BUILD := "odin build src -vet -o:speed"
+BUILD_RELEASE :: "odin build src -vet -o:speed"
 
 run:
   odin run src -out:ice-debug.exe
 release:
-  $$RELEASE_BUILD -out:ice.exe
-  wsl sh -c "$$RELEASE_BUILD -out:ice-linux-x64"
+  $$BUILD_RELEASE -out:ice.exe
+  wsl sh -c "$$BUILD_RELEASE -out:ice-linux-x64"

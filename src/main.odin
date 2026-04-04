@@ -5,6 +5,7 @@ import "core:os"
 import "core:strings"
 import "lib"
 
+// parser
 TokenType :: enum {
 	None,
 	// ignore
@@ -23,7 +24,8 @@ TokenType :: enum {
 	// binary ops
 	Newline,
 	Runnable,
-	Assignment,
+	DeclareConstant,
+	DeclareAssignment,
 }
 parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.Token, operator_precedence: int) {
 	i := parser.start
@@ -70,7 +72,7 @@ parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.T
 			}
 		}
 		j = lib.index_not_ascii_char(parser.str, j, ' ')
-		if lib.starts_with(parser.str[j:], ":=") || lib.starts_with(parser.str[j:], "::") {
+		if lib.starts_with(parser.str[j:], "::") || lib.starts_with(parser.str[j:], ":=") {
 			token.type = int(TokenType.Name)
 			operator_precedence = int(lib.OpType.Value)
 			return
@@ -88,8 +90,11 @@ parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.T
 	case ':':
 		j := lib.index_ascii(parser.str, i, "\n\r ")
 		token.slice = parser.str[i:j]
-		if token.slice == ":=" {
-			token.type = int(TokenType.Assignment)
+		if token.slice == "::" {
+			token.type = int(TokenType.DeclareConstant)
+			operator_precedence = 3
+		} else if token.slice == ":=" {
+			token.type = int(TokenType.DeclareAssignment)
 			operator_precedence = 3
 		} else {
 			lib.report_parser_error(parser, fmt.tprintf("Invalid operator '%v'", token.slice))
@@ -107,6 +112,16 @@ parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.T
 	}
 	return
 }
+
+// interpreter
+Variable :: struct {
+	readonly: bool,
+	value:    union {
+		int,
+		string,
+	},
+}
+Variables :: map[string]Variable
 main :: proc() {
 	// read config from `.ice`
 	config_file, read_err := os.read_entire_file(".ice", allocator = context.allocator)
@@ -133,22 +148,34 @@ main :: proc() {
 	}
 	selected_name := os.args[1]
 	// run the setup
-	variables := map[string]string{}
+	variables := Variables{}
 	setup := ast
 	for setup.type == int(TokenType.Runnable) {setup = setup.left}
 	walk_ast(setup, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
-		variables := (^map[string]string)(user_data)
-		fmt.assertf(TokenType(node.type) == .Assignment, "Unsupported node.type: %v", TokenType(node.type))
-		name := node.left.slice
-		expression := node.right
-		fmt.assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
-		string_value := (^string)(expression.user_data)^
-		variables[name] = string_value
+		variables := (^Variables)(user_data)
+		readonly := false
+		#partial switch TokenType(node.type) {
+		case .DeclareConstant:
+			readonly = true
+			fallthrough
+		case .DeclareAssignment:
+			name := node.left.slice
+			expression := node.right
+			fmt.assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
+			string_value := (^string)(expression.user_data)^
+			if name in variables {
+				current_variable := variables[name]
+				fmt.assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
+			}
+			variables[name] = {readonly, string_value}
+		case:
+			fmt.assertf(false, "Unsupported node.type: %v", TokenType(node.type))
+		}
 	})
 	// run the selected runnable
 	selected_runnable := runnables_map[selected_name]
 	walk_ast(selected_runnable, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
-		variables := (^map[string]string)(user_data)
+		variables := (^Variables)(user_data)
 		source_command := node.slice
 		i := 0
 		sb := strings.builder_make()
@@ -161,7 +188,7 @@ main :: proc() {
 			variable_name := source_command[j + 2:k]
 			variable, variable_exists := variables[variable_name]
 			fmt.assertf(variable_exists, "Undeclared variable '%v'", variable_name)
-			fmt.sbprint(&sb, variable)
+			fmt.sbprint(&sb, variable.value.(string))
 			i = k
 		}
 		command_to_run := strings.to_string(sb)
