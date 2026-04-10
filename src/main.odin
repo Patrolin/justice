@@ -132,18 +132,17 @@ main :: proc() {
 	assert(len(parse_err) == 0, parse_err)
 	// find runnable options
 	runnables_map: map[string]^lib.ASTNode
-	runnables_list_reverse: [dynamic]string
-	for curr := ast; curr != nil && curr.type == int(TokenType.Runnable); curr = curr.left {
+	runnables_list: [dynamic]string
+	for curr := ast; curr != nil && curr.type == int(TokenType.Runnable); curr = curr.right {
+		fmt.printfln("curr: %v", curr)
 		name := curr.slice[:curr.user_data]
 		runnables_map[name] = curr.right
-		append(&runnables_list_reverse, name)
+		append(&runnables_list, name)
 	}
 	// parse the args
 	if len(os.args) < 2 {
 		fmt.println("Usage:")
-		for i := len(runnables_list_reverse) - 1; i >= 0; i -= 1 {
-			fmt.printfln("- ice %v", runnables_list_reverse[i])
-		}
+		for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
 		return
 	}
 	selected_name := os.args[1]
