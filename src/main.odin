@@ -27,7 +27,15 @@ TokenType :: enum {
 	DeclareConstant,
 	DeclareAssignment,
 }
-parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.Token, operator_precedence: int) {
+parse_ice :: proc(
+	parser: ^lib.Parser,
+	prev_node: ^lib.ASTNode,
+) -> (
+	token: lib.Token,
+	op_type: lib.OpType,
+	precedence: int,
+	right_associative: bool,
+) {
 	i := parser.start
 	first_char := parser.str[i]
 	switch first_char {
@@ -35,12 +43,12 @@ parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.T
 		j := lib.index_not_ascii_char(parser.str, i, ' ')
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Whitespace)
-		operator_precedence = int(lib.OpType.Ignore)
+		op_type = lib.OpType.Ignore
 	case '0' ..= '9':
 		j := lib.index_not_ascii(parser.str, i, "0123456789")
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Int)
-		operator_precedence = int(lib.OpType.Value)
+		op_type = lib.OpType.Value
 	case '"':
 		// TODO: parse strings properly
 		j := lib.index_ascii_char(parser.str, i + 1, '"') + 1
@@ -49,7 +57,7 @@ parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.T
 		string_value := new([]u8)
 		string_value^ = transmute([]u8)(token.slice[1:len(token.slice) - 1])
 		token.user_data = uintptr(string_value)
-		operator_precedence = int(lib.OpType.Value)
+		op_type = lib.OpType.Value
 	case '$', 'A' ..= 'Z', '_', 'a' ..= 'z':
 		j := lib.index_not_ascii(parser.str, i, "$ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 		token.slice = parser.str[i:j]
@@ -67,46 +75,47 @@ parse_ice :: proc(parser: ^lib.Parser, prev_node: ^lib.ASTNode) -> (token: lib.T
 				j = lib.index_ignore_newline(parser.str, j + 1)
 				token.slice = parser.str[i:j]
 				token.type = int(TokenType.Runnable)
-				operator_precedence = 1
+				precedence = 1
+				right_associative = true
 				return
 			}
 		}
 		j = lib.index_not_ascii_char(parser.str, j, ' ')
 		if lib.starts_with(parser.str[j:], "::") || lib.starts_with(parser.str[j:], ":=") {
 			token.type = int(TokenType.Name)
-			operator_precedence = int(lib.OpType.Value)
+			op_type = lib.OpType.Value
 			return
 		}
 		j = lib.index_newline(parser.str, j)
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Command)
-		operator_precedence = int(lib.OpType.Value)
+		op_type = lib.OpType.Value
 		return
 	case '\n', '\r':
 		j := lib.index_ignore_newline(parser.str, i)
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Newline)
-		operator_precedence = 2
+		precedence = 2
 	case ':':
 		j := lib.index_ascii(parser.str, i, "\n\r ")
 		token.slice = parser.str[i:j]
 		if token.slice == "::" {
 			token.type = int(TokenType.DeclareConstant)
-			operator_precedence = 3
+			precedence = 3
 		} else if token.slice == ":=" {
 			token.type = int(TokenType.DeclareAssignment)
-			operator_precedence = 3
+			precedence = 3
 		} else {
 			lib.report_parser_error(parser, fmt.tprintf("Invalid operator '%v'", token.slice))
 		}
 	case '+':
 		token.slice = parser.str[i:i + 1]
 		token.type = int(TokenType.Plus)
-		operator_precedence = 10
+		precedence = 10
 	case '-':
 		token.slice = parser.str[i:i + 1]
 		token.type = int(TokenType.Minus)
-		operator_precedence = 10
+		precedence = 10
 	case:
 		lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
 	}
