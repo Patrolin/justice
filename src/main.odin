@@ -77,7 +77,8 @@ parse_ice :: proc(
 		token.user_data = uintptr(string_value)
 		op_type = lib.OpType.Value
 	case '$', 'A' ..= 'Z', '_', 'a' ..= 'z':
-		j := lib.index_not_ascii(parser.str, i, "$ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+		/* NOTE: most linux shells only allow `[A-Z_a-z][0-9A-Z_a-z]*` */
+		j := lib.index_not_ascii(parser.str, i, "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 		token.slice = parser.str[i:j]
 		if token.slice == "if" {
 			lib.report_parser_error(parser, "TODO: if")
