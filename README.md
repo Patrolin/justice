@@ -16,10 +16,20 @@ release:
 - `ice` - list runnable options
 - `ice <option_name>` - run the selected option
 
+## Features
+```
+FOO :: "foo"   // declare a constant
+foo :: "foo"   // declare a variable
+bar:           // declare a runnable
+  echo "hello" // run a command
+  echo $$foo   // run a command using the value of foo
+```
+
 ## Todo list
-- Print error line in config on error
-- builtin `OS_WINDOWS`, ...
+- Print error line from config on error
 - `if` conditions
-- builtin `ARGS` from `ice run -- ..ARGS`
+- `params()` builtin for bools
 - `args += "-foo -bar"` to append arguments into a variable with implicit spaces
+- builtin `ARGS` from `ice run -- ..ARGS`
+- builtin `$var` from environment variables
 - builtin functions for cleaning dirs safely

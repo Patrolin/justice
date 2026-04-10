@@ -8,11 +8,11 @@ import "lib"
 // parser
 TokenType :: enum {
 	None,
-	// ignore
-	Whitespace,
-	// brackets
-	LeftBracket,
-	RightBracket,
+	// binary ops
+	Newline,
+	Runnable,
+	DeclareConstant,
+	DeclareAssignment,
 	// values
 	Int,
 	String,
@@ -21,11 +21,13 @@ TokenType :: enum {
 	// unary ops
 	Plus,
 	Minus,
-	// binary ops
-	Newline,
-	Runnable,
-	DeclareConstant,
-	DeclareAssignment,
+	// brackets
+	LeftBracket,
+	RightBracket,
+	// ignore
+	Whitespace,
+	SingleLineComment,
+	MultiLineComment,
 }
 parse_ice :: proc(
 	parser: ^lib.Parser,
@@ -44,6 +46,22 @@ parse_ice :: proc(
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Whitespace)
 		op_type = lib.OpType.Ignore
+	case '/':
+		j := lib.index_ascii_char(parser.str, i, ' ')
+		token.slice = parser.str[i:j]
+		if token.slice == "//" {
+			j = lib.index_newline(parser.str, j)
+			token.slice = parser.str[i:j]
+			token.type = int(TokenType.SingleLineComment)
+			op_type = lib.OpType.Ignore
+		} else if token.slice == "/*" {
+			j = lib.index_after(parser.str, j, "*/")
+			token.slice = parser.str[i:j]
+			token.type = int(TokenType.MultiLineComment)
+			op_type = lib.OpType.Ignore
+		} else {
+			lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
+		}
 	case '0' ..= '9':
 		j := lib.index_not_ascii(parser.str, i, "0123456789")
 		token.slice = parser.str[i:j]

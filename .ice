@@ -1,3 +1,5 @@
+// foobar
+/* boo */
 BUILD_RELEASE :: "odin build src -vet -o:speed"
 
 run:
