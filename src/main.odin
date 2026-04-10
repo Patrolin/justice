@@ -200,7 +200,6 @@ main :: proc() {
 			fmt.assertf(false, "Unsupported node.type: %v", TokenType(node.type))
 		}
 	})
-	fmt.printfln("variables: %v", variables)
 	// run the selected runnable
 	selected_runnable := runnables_map[selected_runnable_name]
 	walk_ast(selected_runnable, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
