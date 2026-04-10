@@ -134,7 +134,6 @@ main :: proc() {
 	runnables_map: map[string]^lib.ASTNode
 	runnables_list: [dynamic]string
 	for curr := ast; curr != nil && curr.type == int(TokenType.Runnable); curr = curr.right {
-		fmt.printfln("curr: %v", curr)
 		name := curr.slice[:curr.user_data]
 		runnables_map[name] = curr.right
 		append(&runnables_list, name)
@@ -145,9 +144,12 @@ main :: proc() {
 		for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
 		return
 	}
-	selected_name := os.args[1]
-	// run the setup
+	selected_runnable_name := os.args[1]
+	// add builtin constants
 	variables := Variables{}
+	if ODIN_OS == .Windows {variables["OS_WINDOWS"] = Variable{true, 1}}
+	if ODIN_OS == .Linux {variables["OS_LINUX"] = Variable{true, 1}}
+	// run the user setup code
 	setup := ast
 	for setup.type == int(TokenType.Runnable) {setup = setup.left}
 	walk_ast(setup, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
@@ -171,8 +173,9 @@ main :: proc() {
 			fmt.assertf(false, "Unsupported node.type: %v", TokenType(node.type))
 		}
 	})
+	fmt.printfln("variables: %v", variables)
 	// run the selected runnable
-	selected_runnable := runnables_map[selected_name]
+	selected_runnable := runnables_map[selected_runnable_name]
 	walk_ast(selected_runnable, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
 		variables := (^Variables)(user_data)
 		source_command := node.slice
