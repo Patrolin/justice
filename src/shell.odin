@@ -2,6 +2,7 @@ package main
 import "core:fmt"
 import "core:os"
 
+@(require_results)
 execute_command :: proc(command: string) -> int {
 	when ODIN_OS == .Windows {
 		process, process_create_err := os.process_start(

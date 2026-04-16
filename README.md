@@ -28,6 +28,7 @@ bar:           // declare a runnable
 ## Todo list
 - Print error line from config on error
 - `if` conditions
+- builtin `EXE(string)` -> add ".exe" suffix on windows?
 - `params()` builtin for bools
 - `args += "-foo -bar"` to append arguments into a variable with implicit spaces
 - ability to run substeps via `step()`

@@ -1,5 +1,6 @@
-// odin run src -out:ice-debug.exe
+// odin run src -out:ice-debug.exe -- release
 package main
+import "base:intrinsics"
 import "core:fmt"
 import "core:os"
 import "core:strings"
@@ -81,8 +82,22 @@ parse_ice :: proc(
 		j := lib.index_not_ascii(parser.str, i, "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 		token.slice = parser.str[i:j]
 		if token.slice == "if" {
-			lib.report_parser_error(parser, "TODO: if")
-			return
+			if true {
+				lib.report_parser_error(parser, "TODO: if")
+			} else {
+				/*condition_end := lib.index_not_ascii_char(parser.str, j, '{')
+				if condition_end >= len(parser.str) {
+					lib.report_parser_error(parser, "Missing block after if statement")
+					return
+				}
+				condition, condition_error := lib.parse(parser.str[:condition_end], parse_ice, j)
+				if len(condition_error) != 0 {
+					lib.report_parser_error(parser, condition_error)
+					return
+				}
+				true_block_start := condition_end + 1
+				true_block, true_error := lib.parse(parser.str[:condition_end], parse_ice, true_block_start)*/
+			}
 		}
 		if j < len(parser.str) {
 			switch parser.str[j] {
@@ -136,9 +151,27 @@ parse_ice :: proc(
 		token.type = int(TokenType.Minus)
 		precedence = 10
 	case:
-		lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
+		if prev_node == nil {
+			j := lib.index_newline(parser.str, i)
+			token.slice = parser.str[i:j]
+			token.type = int(TokenType.Command)
+			op_type = lib.OpType.Value
+		} else {
+			lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
+		}
 	}
 	return
+}
+IS_RELEASE :: ODIN_OPTIMIZATION_MODE == .Speed
+assertf :: proc(condition: bool, format: string, args: ..any, loc := #caller_location) {
+	when IS_RELEASE {
+		if intrinsics.expect(!condition, false) {
+			fmt.printfln(format, ..args)
+			intrinsics.trap()
+		}
+	} else {
+		fmt.assertf(condition, format, ..args, loc = loc)
+	}
 }
 
 // interpreter
@@ -156,7 +189,7 @@ main :: proc() {
 	assert(read_err == nil, "Failed to open .ice")
 	// parse the config
 	ast, parse_err := lib.parse(string(config_file), parse_ice)
-	when ODIN_OPTIMIZATION_MODE != .Speed {lib.print_ast(ast)}
+	when !IS_RELEASE {lib.print_ast(ast)}
 	assert(len(parse_err) == 0, parse_err)
 	// find runnable options
 	runnables_map: map[string]^lib.ASTNode
@@ -190,15 +223,15 @@ main :: proc() {
 		case .DeclareAssignment:
 			name := node.left.slice
 			expression := node.right
-			fmt.assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
+			assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
 			string_value := (^string)(expression.user_data)^
 			if name in variables {
 				current_variable := variables[name]
-				fmt.assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
+				assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
 			}
 			variables[name] = {readonly, string_value}
 		case:
-			fmt.assertf(false, "Unsupported node.type: %v", TokenType(node.type))
+			assertf(false, "Unsupported node.type: %v", TokenType(node.type))
 		}
 	})
 	// run the selected runnable
@@ -216,13 +249,18 @@ main :: proc() {
 			k := lib.index_not_ascii(source_command, j + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 			variable_name := source_command[j + 2:k]
 			variable, variable_exists := variables[variable_name]
-			fmt.assertf(variable_exists, "Undeclared variable '%v'", variable_name)
+			assertf(variable_exists, "Undeclared variable '%v'", variable_name)
 			fmt.sbprint(&sb, variable.value.(string))
 			i = k
 		}
 		command_to_run := strings.to_string(sb)
+		if lib.starts_with(command_to_run, "rm ") || lib.starts_with(command_to_run, "del ") {
+			fmt.printfln("Suspicious command: '%v', aborting.", command_to_run)
+			return
+		}
 		fmt.println(command_to_run)
-		execute_command(command_to_run)
+		return_code := execute_command(command_to_run)
+		assertf(return_code == 0, "Got return code %v, aborting.", return_code)
 	})
 }
 walk_ast :: proc(node: ^lib.ASTNode, user_data: rawptr, callback: proc(node: ^lib.ASTNode, user_data: rawptr)) {

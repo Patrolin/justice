@@ -102,10 +102,10 @@ _parse_recursively :: proc(parser: ^Parser, min_precedence: int, allocator := co
 	}
 	return
 }
-parse :: proc(str: string, parser_proc: ParserProc, allocator := context.temp_allocator) -> (node: ^ASTNode, error: string) {
+parse :: proc(str: string, parser_proc: ParserProc, start := 0, allocator := context.temp_allocator) -> (node: ^ASTNode, error: string) {
 	parser := Parser {
 		str         = str,
-		start       = 0,
+		start       = start,
 		parser_proc = parser_proc,
 		keep_going  = true,
 		error       = "",
