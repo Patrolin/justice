@@ -196,7 +196,9 @@ main :: proc() {
 	runnables_list: [dynamic]string
 	for curr := ast; curr != nil && curr.type == int(TokenType.Runnable); curr = curr.right {
 		name := curr.slice[:curr.user_data]
-		runnables_map[name] = curr.right
+		code := curr.right
+		if TokenType(code.type) == .Runnable {code = code.left}
+		runnables_map[name] = code
 		append(&runnables_list, name)
 	}
 	// parse the args
@@ -217,14 +219,19 @@ main :: proc() {
 	if ODIN_OS == .Windows {variables["OS_WINDOWS"] = Variable{true, 1}}
 	if ODIN_OS == .Linux {variables["OS_LINUX"] = Variable{true, 1}}
 	// run the user setup code
-	setup := ast
-	for setup.type == int(TokenType.Runnable) {setup = setup.left}
-	walk_ast(setup, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
+	setup := ast.left
+	run_interpreter(setup, &variables)
+	// run the selected runnable
+	selected_runnable := runnables_map[selected_runnable_name]
+	run_interpreter(selected_runnable, &variables)
+}
+run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
+	walk_ast_lines(parent, variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
 		variables := (^Variables)(user_data)
-		readonly := false
+		variable_readonly := false
 		#partial switch TokenType(node.type) {
 		case .DeclareConstant:
-			readonly = true
+			variable_readonly = true
 			fallthrough
 		case .DeclareAssignment:
 			name := node.left.slice
@@ -235,50 +242,46 @@ main :: proc() {
 				current_variable := variables[name]
 				assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
 			}
-			variables[name] = {readonly, string_value}
+			variables[name] = {variable_readonly, string_value}
+		case .Command:
+			source_command := node.slice
+			i := 0
+			sb := strings.builder_make()
+			for {
+				j := lib.index(source_command, i, "$$")
+				fmt.sbprint(&sb, source_command[i:j])
+				i = j
+				if i >= len(source_command) {break}
+				k := lib.index_not_ascii(source_command, j + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+				variable_name := source_command[j + 2:k]
+				variable, variable_exists := variables[variable_name]
+				assertf(variable_exists, "Undeclared variable '%v'", variable_name)
+				switch v in variable.value {
+				case int:
+					fmt.sbprint(&sb, v)
+				case string:
+					fmt.sbprint(&sb, v)
+				}
+				i = k
+			}
+			command_to_run := strings.to_string(sb)
+			if lib.starts_with(command_to_run, "rm ") || lib.starts_with(command_to_run, "del ") {
+				fmt.printfln("Suspicious command: '%v', aborting.", command_to_run)
+				return
+			}
+			fmt.println(command_to_run)
+			return_code := execute_command(command_to_run)
+			assertf(return_code == 0, "Got return code %v, aborting.", return_code)
 		case:
 			assertf(false, "Unsupported node.type: %v", TokenType(node.type))
 		}
 	})
-	// run the selected runnable
-	selected_runnable := runnables_map[selected_runnable_name]
-	walk_ast(selected_runnable.left, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
-		variables := (^Variables)(user_data)
-		source_command := node.slice
-		i := 0
-		sb := strings.builder_make()
-		for {
-			j := lib.index(source_command, i, "$$")
-			fmt.sbprint(&sb, source_command[i:j])
-			i = j
-			if i >= len(source_command) {break}
-			k := lib.index_not_ascii(source_command, j + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
-			variable_name := source_command[j + 2:k]
-			variable, variable_exists := variables[variable_name]
-			assertf(variable_exists, "Undeclared variable '%v'", variable_name)
-			switch v in variable.value {
-			case int:
-				fmt.sbprint(&sb, v)
-			case string:
-				fmt.sbprint(&sb, v)
-			}
-			i = k
-		}
-		command_to_run := strings.to_string(sb)
-		if lib.starts_with(command_to_run, "rm ") || lib.starts_with(command_to_run, "del ") {
-			fmt.printfln("Suspicious command: '%v', aborting.", command_to_run)
-			return
-		}
-		fmt.println(command_to_run)
-		return_code := execute_command(command_to_run)
-		assertf(return_code == 0, "Got return code %v, aborting.", return_code)
-	})
 }
-walk_ast :: proc(node: ^lib.ASTNode, user_data: rawptr, callback: proc(node: ^lib.ASTNode, user_data: rawptr)) {
+walk_ast_lines :: proc(node: ^lib.ASTNode, user_data: rawptr, callback: proc(node: ^lib.ASTNode, user_data: rawptr)) {
 	if node == nil {return}
 	if node.type == int(TokenType.Newline) {
-		walk_ast(node.left, user_data, callback)
-		walk_ast(node.right, user_data, callback)
+		walk_ast_lines(node.left, user_data, callback)
+		walk_ast_lines(node.right, user_data, callback)
 	} else {
 		callback(node, user_data)
 	}

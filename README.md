@@ -7,7 +7,7 @@ Create a `.ice` file in your project root with some runnable options:
 BUILD_RELEASE :: "odin build src -vet -o:speed"
 
 run:
-  odin run src -out:ice-debug.exe
+  odin run src -out:ice-debug.exe -- $$ARGS
 release:
   $$BUILD_RELEASE -out:ice.exe
   wsl sh -c "$$BUILD_RELEASE -out:ice-linux-x64"
