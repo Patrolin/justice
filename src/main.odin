@@ -206,8 +206,14 @@ main :: proc() {
 		return
 	}
 	selected_runnable_name := os.args[1]
+	args: strings.Builder
+	if (len(os.args) >= 3) {
+		fmt.sbprint(&args, os.args[2])
+		for arg in os.args[3:] {fmt.sbprintf(&args, " %v", arg)}
+	}
 	// add builtin constants
 	variables := Variables{}
+	variables["ARGS"] = Variable{true, strings.to_string(args)}
 	if ODIN_OS == .Windows {variables["OS_WINDOWS"] = Variable{true, 1}}
 	if ODIN_OS == .Linux {variables["OS_LINUX"] = Variable{true, 1}}
 	// run the user setup code
@@ -236,7 +242,7 @@ main :: proc() {
 	})
 	// run the selected runnable
 	selected_runnable := runnables_map[selected_runnable_name]
-	walk_ast(selected_runnable, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
+	walk_ast(selected_runnable.left, &variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
 		variables := (^Variables)(user_data)
 		source_command := node.slice
 		i := 0
@@ -250,7 +256,12 @@ main :: proc() {
 			variable_name := source_command[j + 2:k]
 			variable, variable_exists := variables[variable_name]
 			assertf(variable_exists, "Undeclared variable '%v'", variable_name)
-			fmt.sbprint(&sb, variable.value.(string))
+			switch v in variable.value {
+			case int:
+				fmt.sbprint(&sb, v)
+			case string:
+				fmt.sbprint(&sb, v)
+			}
 			i = k
 		}
 		command_to_run := strings.to_string(sb)

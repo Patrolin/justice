@@ -32,6 +32,5 @@ bar:           // declare a runnable
 - `params()` builtin for bools
 - `args += "-foo -bar"` to append arguments into a variable with implicit spaces
 - ability to run substeps via `step()`
-- builtin `ARGS` from `ice run -- ..ARGS`
 - builtin `$var` from environment variables
 - builtin functions for cleaning dirs safely
