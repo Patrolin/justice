@@ -18,19 +18,21 @@ release:
 
 ## Features
 ```
-FOO :: "foo"   // declare a constant
-foo :: "foo"   // declare a variable
-bar:           // declare a runnable
-  echo "hello" // run a command
-  echo $$foo   // run a command using the value of foo
+COMMAND :: "echo"   // declare a constant
+values := "foo bar" // declare a variable
+bar:                // declare a runnable
+  echo "hello"       // run a command
+  echo $$ARGS        // run a command using the rest of the commandline arguments
+  $$COMMAND $$values // run a command using variables
 ```
 
 ## Todo list
+- escape strings in `$$$var`
 - Print error line from config on error
 - `if` conditions
 - builtin `EXE(string)` -> add ".exe" suffix on windows?
 - `params()` builtin for bools
 - `args += "-foo -bar"` to append arguments into a variable with implicit spaces
 - ability to run substeps via `step()`
-- builtin `$var` from environment variables
+- builtin `$var` for getting/setting environment variables
 - builtin functions for cleaning dirs safely
