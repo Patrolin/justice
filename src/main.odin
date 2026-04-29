@@ -43,7 +43,7 @@ parse_ice :: proc(
 	first_char := parser.str[i]
 	switch first_char {
 	case ' ':
-		j := lib.index_not_ascii_char(parser.str, i, ' ')
+		j := lib.index_after_ascii_char(parser.str, i, ' ')
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Whitespace)
 		op_type = lib.OpType.Ignore
@@ -64,7 +64,7 @@ parse_ice :: proc(
 			lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
 		}
 	case '0' ..= '9':
-		j := lib.index_not_ascii(parser.str, i, "0123456789")
+		j := lib.index_after_ascii(parser.str, i, "0123456789")
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Int)
 		op_type = lib.OpType.Value
@@ -78,14 +78,25 @@ parse_ice :: proc(
 		token.user_data = uintptr(string_value)
 		op_type = lib.OpType.Value
 	case '$', 'A' ..= 'Z', '_', 'a' ..= 'z':
+		// try parsing a runnable
+		j := lib.index_after_ascii(parser.str, i, "$-:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+		if parser.str[j - 1] == ':' {
+			token.user_data = uintptr((j - 1) - i)
+			j = lib.index_after_newline(parser.str, j)
+			token.slice = parser.str[i:j]
+			token.type = int(TokenType.Runnable)
+			precedence = 1
+			right_associative = true
+			break
+		}
 		/* NOTE: most linux shells only allow `[A-Z_a-z][0-9A-Z_a-z]*` */
-		j := lib.index_not_ascii(parser.str, i, "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+		j = lib.index_after_ascii(parser.str, i, "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 		token.slice = parser.str[i:j]
 		if token.slice == "if" {
 			if true {
 				lib.report_parser_error(parser, "TODO: if")
 			} else {
-				/*condition_end := lib.index_not_ascii_char(parser.str, j, '{')
+				/*condition_end := lib.index_after_ascii_char(parser.str, j, '{')
 				if condition_end >= len(parser.str) {
 					lib.report_parser_error(parser, "Missing block after if statement")
 					return
@@ -104,17 +115,9 @@ parse_ice :: proc(
 			case '(':
 				lib.report_parser_error(parser, "TODO: function call")
 				return
-			case ':':
-				token.user_data = uintptr(j - i)
-				j = lib.index_ignore_newline(parser.str, j + 1)
-				token.slice = parser.str[i:j]
-				token.type = int(TokenType.Runnable)
-				precedence = 1
-				right_associative = true
-				return
 			}
 		}
-		j = lib.index_not_ascii_char(parser.str, j, ' ')
+		j = lib.index_after_ascii_char(parser.str, j, ' ')
 		if lib.starts_with(parser.str[j:], "::") || lib.starts_with(parser.str[j:], ":=") {
 			token.type = int(TokenType.Name)
 			op_type = lib.OpType.Value
@@ -126,7 +129,7 @@ parse_ice :: proc(
 		op_type = lib.OpType.Value
 		return
 	case '\n', '\r':
-		j := lib.index_ignore_newline(parser.str, i)
+		j := lib.index_after_newlines(parser.str, i)
 		token.slice = parser.str[i:j]
 		token.type = int(TokenType.Newline)
 		precedence = 2
@@ -252,7 +255,7 @@ run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
 				fmt.sbprint(&sb, source_command[i:j])
 				i = j
 				if i >= len(source_command) {break}
-				k := lib.index_not_ascii(source_command, j + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+				k := lib.index_after_ascii(source_command, j + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 				variable_name := source_command[j + 2:k]
 				variable, variable_exists := variables[variable_name]
 				assertf(variable_exists, "Undeclared variable '%v'", variable_name)

@@ -17,7 +17,7 @@ index_ascii_char :: proc "c" (str: string, start: int, ascii_char: byte) -> (mid
 	for i < len(str) && str[i] != ascii_char {i += 1}
 	return i
 }
-index_not_ascii_char :: proc "c" (str: string, start: int, ascii_char: byte) -> (middle: int) {
+index_after_ascii_char :: proc "c" (str: string, start: int, ascii_char: byte) -> (middle: int) {
 	i := start
 	for i < len(str) && str[i] == ascii_char {i += 1}
 	return i
@@ -35,7 +35,7 @@ index_ascii :: proc "c" (str: string, start: int, ascii_chars: string) -> (middl
 	}
 	return len(str)
 }
-index_not_ascii :: proc "c" (str: string, start: int, ascii_chars: string) -> (middle: int) {
+index_after_ascii :: proc "c" (str: string, start: int, ascii_chars: string) -> (middle: int) {
 	set := make_ascii_bitset(ascii_chars)
 	for i in start ..< len(str) {
 		c := str[i]
@@ -48,13 +48,13 @@ index_not_ascii :: proc "c" (str: string, start: int, ascii_chars: string) -> (m
 index_newline :: proc "c" (str: string, start: int) -> (end: int) {
 	return index_ascii(str, start, "\r\n")
 }
-index_ignore_newline :: proc "c" (str: string, start: int) -> (end: int) {
+index_after_newline :: proc "c" (str: string, start: int) -> (end: int) {
 	j := start
 	if j < len(str) && str[j] == '\r' {j += 1}
 	if j < len(str) && str[j] == '\n' {j += 1}
 	return j
 }
-index_ignore_newlines :: proc "c" (str: string, start: int) -> (end: int) {
+index_after_newlines :: proc "c" (str: string, start: int) -> (end: int) {
 	j := start
 	for j < len(str) && (str[j] == '\r' || str[j] == '\n') {j += 1}
 	return j
@@ -120,13 +120,7 @@ index_after :: proc "c" (str: string, start: int, substr: string) -> (middle: in
 	return min(j, len(str))
 }
 /* returns the first byte offset of the first `substring` in the `str`, or `len(str)` when not found. */
-index_multi :: proc "c" (
-	str: string,
-	start: int,
-	substrings: ..string,
-) -> (
-	middle, substr_index: int,
-) {
+index_multi :: proc "c" (str: string, start: int, substrings: ..string) -> (middle, substr_index: int) {
 	slice := str[start:]
 	N := len(slice)
 	// find smallest substring
@@ -180,13 +174,7 @@ index_multi :: proc "c" (
 	}
 	return len(str), 0
 }
-index_multi_after :: proc "c" (
-	str: string,
-	start: int,
-	substrings: ..string,
-) -> (
-	middle, end, k: int,
-) {
+index_multi_after :: proc "c" (str: string, start: int, substrings: ..string) -> (middle, end, k: int) {
 	middle, k = index_multi(str, start, ..substrings)
 	end = min(middle + len(substrings[k]), len(str))
 	return
