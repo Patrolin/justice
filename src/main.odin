@@ -225,7 +225,8 @@ main :: proc() {
 	setup := ast.left
 	run_interpreter(setup, &variables)
 	// run the selected runnable
-	selected_runnable := runnables_map[selected_runnable_name]
+	selected_runnable, runnable_exists := runnables_map[selected_runnable_name]
+	assertf(runnable_exists, "Runnable '%v' does not exist.", selected_runnable_name)
 	run_interpreter(selected_runnable, &variables)
 }
 run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
