@@ -256,7 +256,7 @@ run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
 				fmt.sbprint(&sb, source_command[i:j])
 				i = j
 				if i >= len(source_command) {break}
-				k := lib.index_after_ascii(source_command, j + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+				k := lib.index_after_ascii(source_command, j + 2, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
 				variable_name := source_command[j + 2:k]
 				variable, variable_exists := variables[variable_name]
 				assertf(variable_exists, "Undeclared variable '%v'", variable_name)
@@ -270,8 +270,7 @@ run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
 			}
 			command_to_run := strings.to_string(sb)
 			if lib.starts_with(command_to_run, "rm ") || lib.starts_with(command_to_run, "del ") {
-				fmt.printfln("Suspicious command: '%v', aborting.", command_to_run)
-				return
+				assertf(false, "Suspicious command: '%v', aborting.", command_to_run)
 			}
 			fmt.println(command_to_run)
 			return_code := execute_command(command_to_run)
