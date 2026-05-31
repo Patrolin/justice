@@ -219,6 +219,11 @@ main :: proc() {
 	// add builtin constants
 	variables := Variables{}
 	variables["ARGS"] = Variable{true, strings.to_string(args)}
+	version_file, version_file_exists := os.read_entire_file_from_path("VERSION", allocator = context.allocator)
+	if version_file_exists == nil {
+		version := strings.trim(string(version_file), " \t\r\n")
+		variables["VERSION"] = Variable{true, version}
+	}
 	if ODIN_OS == .Windows {variables["OS_WINDOWS"] = Variable{true, 1}}
 	if ODIN_OS == .Linux {variables["OS_LINUX"] = Variable{true, 1}}
 	// run the user setup code
