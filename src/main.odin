@@ -6,6 +6,8 @@ import "core:os"
 import "core:strings"
 import "lib"
 
+VERSION :: #config(VERSION, "0")
+
 // parser
 TokenType :: enum {
 	None,
@@ -206,7 +208,7 @@ main :: proc() {
 	}
 	// parse the args
 	if len(os.args) < 2 {
-		fmt.println("Usage:")
+		fmt.printfln("ice %v:", VERSION)
 		for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
 		return
 	}
@@ -219,13 +221,34 @@ main :: proc() {
 	// add builtin constants
 	variables := Variables{}
 	variables["ARGS"] = Variable{true, strings.to_string(args)}
-	version_file, version_file_exists := os.read_entire_file_from_path("VERSION", allocator = context.allocator)
-	if version_file_exists == nil {
-		version := strings.trim(string(version_file), " \t\r\n")
-		variables["VERSION"] = Variable{true, version}
-	}
 	if ODIN_OS == .Windows {variables["OS_WINDOWS"] = Variable{true, 1}}
 	if ODIN_OS == .Linux {variables["OS_LINUX"] = Variable{true, 1}}
+	// add environment variables
+	default_env, default_env_err := os.environ(context.temp_allocator)
+	fmt.assertf(default_env_err == nil, "Failed to get environment")
+	for assignment in default_env {
+		j := lib.index_ascii_char(assignment, 0, '=')
+		key := assignment[:j]
+		value := assignment[j + 1:len(assignment)]
+		variables[fmt.tprintf("$%v", key)] = Variable{true, value}
+	}
+	// add `.env` file
+	env_file, env_file_err := os.read_entire_file_from_path(".env", allocator = context.allocator)
+	if env_file_err == nil {
+		env_file := string(env_file)
+		i := 0
+		j := 0
+		for j < len(env_file) {
+			j = lib.index_ascii(env_file, i, "=#\r\n")
+			left := strings.trim(env_file[i:j], " ")
+			j = min(j + 1, len(env_file))
+			k := lib.index_ascii(env_file, j, "#\r\n")
+			right := strings.trim(env_file[j:k], " ")
+			if len(right) > 0 {variables[fmt.tprintf("$%v", left)] = Variable{true, right}}
+			l := lib.index_newline(env_file, k)
+			i = lib.index_after_newline(env_file, l)
+		}
+	}
 	// run the user setup code
 	setup := ast.left
 	run_interpreter(setup, &variables)
@@ -235,55 +258,74 @@ main :: proc() {
 	run_interpreter(selected_runnable, &variables)
 }
 run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
-	walk_ast_lines(parent, variables, proc(node: ^lib.ASTNode, user_data: rawptr) {
-		variables := (^Variables)(user_data)
-		variable_readonly := false
-		#partial switch TokenType(node.type) {
-		case .DeclareConstant:
-			variable_readonly = true
-			fallthrough
-		case .DeclareAssignment:
-			name := node.left.slice
-			expression := node.right
-			assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
-			string_value := (^string)(expression.user_data)^
-			if name in variables {
-				current_variable := variables[name]
-				assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
-			}
-			variables[name] = {variable_readonly, string_value}
-		case .Command:
-			source_command := node.slice
-			i := 0
-			sb := strings.builder_make()
-			for {
-				j := lib.index(source_command, i, "$$")
-				fmt.sbprint(&sb, source_command[i:j])
-				i = j
-				if i >= len(source_command) {break}
-				k := lib.index_after_ascii(source_command, j + 2, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
-				variable_name := source_command[j + 2:k]
-				variable, variable_exists := variables[variable_name]
-				assertf(variable_exists, "Undeclared variable '%v'", variable_name)
-				switch v in variable.value {
-				case int:
-					fmt.sbprint(&sb, v)
-				case string:
-					fmt.sbprint(&sb, v)
+	walk_ast_lines(
+		parent,
+		variables,
+		proc(node: ^lib.ASTNode, user_data: rawptr) {
+			variables := (^Variables)(user_data)
+			variable_readonly := false
+			#partial switch TokenType(node.type) {
+			case .DeclareConstant:
+				variable_readonly = true
+				fallthrough
+			case .DeclareAssignment:
+				name := node.left.slice
+				expression := node.right
+				assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
+				string_value := (^string)(expression.user_data)^
+				if name in variables {
+					current_variable := variables[name]
+					assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
 				}
-				i = k
+				variables[name] = {variable_readonly, string_value}
+			case .Command:
+				command := node.slice
+				// expand $$var
+				i := 0
+				sb := strings.builder_make()
+				for {
+					j := lib.index(command, i, "$$")
+					fmt.sbprint(&sb, command[i:j])
+					if j >= len(command) {break}
+					k := lib.index_after_ascii(command, j + 2, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+					variable_name := command[j + 2:k]
+					variable, variable_exists := variables[variable_name]
+					assertf(variable_exists, "Undeclared variable '%v'", variable_name)
+					fmt.sbprintf(&sb, "%v", variable.value)
+					i = k
+				}
+				command = strings.to_string(sb)
+				// expand $env_var (because Windows is dumb...)
+				i = 0
+				sb = strings.builder_make()
+				for {
+					j := lib.index(command, i, "$")
+					fmt.sbprint(&sb, command[i:j])
+					if j >= len(command) {break}
+					k := lib.index_after_ascii(command, j + 1, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+					variable_name := command[j:k]
+					_, variable_exists := variables[variable_name]
+					assertf(variable_exists, "Undeclared variable '%v'", variable_name)
+					when ODIN_OS == .Windows {
+						fmt.sbprintf(&sb, "$env:%v", variable_name[1:])
+					} else {
+						fmt.sbprint(&sb, variable_name) // NOTE: posix shells already interpret `$var` correctly
+					}
+					i = k
+				}
+				command = strings.to_string(sb)
+				// run the command
+				if lib.starts_with(command, "rm ") || lib.starts_with(command, "del ") {
+					assertf(false, "Suspicious command: '%v', aborting.", command)
+				}
+				fmt.println(command)
+				return_code := execute_command(command, variables)
+				assertf(return_code == 0, "Got return code %v, aborting.", return_code)
+			case:
+				assertf(false, "Unsupported node.type: %v", TokenType(node.type))
 			}
-			command_to_run := strings.to_string(sb)
-			if lib.starts_with(command_to_run, "rm ") || lib.starts_with(command_to_run, "del ") {
-				assertf(false, "Suspicious command: '%v', aborting.", command_to_run)
-			}
-			fmt.println(command_to_run)
-			return_code := execute_command(command_to_run)
-			assertf(return_code == 0, "Got return code %v, aborting.", return_code)
-		case:
-			assertf(false, "Unsupported node.type: %v", TokenType(node.type))
-		}
-	})
+		},
+	)
 }
 walk_ast_lines :: proc(node: ^lib.ASTNode, user_data: rawptr, callback: proc(node: ^lib.ASTNode, user_data: rawptr)) {
 	if node == nil {return}

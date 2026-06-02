@@ -1,9 +1,8 @@
-// foobar
-/* boo */
-BUILD_RELEASE :: "odin build src -vet -o:speed"
-
+// odin run src -out:ice-debug.exe -define:VERSION=debug -- release
+/* foobar */
 run:
-  odin run src -out:ice-debug.exe -- $$ARGS
+  odin run src -out:ice-debug.exe -define:VERSION="$version" -- $$ARGS
 release:
-  $$BUILD_RELEASE -out:ice.exe
-  wsl sh -c "$$BUILD_RELEASE -out:ice-linux-x64"
+  BUILD :: "odin build src -vet -o:speed -define:VERSION=$version"
+  $$BUILD -out:ice.exe
+  wsl sh -c "$$BUILD -out:ice-linux-x64"

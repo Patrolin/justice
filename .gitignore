@@ -1,3 +1,4 @@
 *.exe
 *.obj
 *-linux-*
+tmp.odin
