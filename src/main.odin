@@ -51,15 +51,14 @@ parse_ice :: proc(
     token.type = int(TokenType.Whitespace)
     op_type = lib.OpType.Ignore
   case '/':
-    j := lib.index_ascii_char(parser.str, i, ' ')
-    token.slice = parser.str[i:j]
-    if token.slice == "//" {
-      j = lib.index_newline(parser.str, j)
+    token.slice = parser.str[i:]
+    if lib.starts_with(token.slice, "//") {
+      j := lib.index_newline(parser.str, i + 2)
       token.slice = parser.str[i:j]
       token.type = int(TokenType.SingleLineComment)
       op_type = lib.OpType.Ignore
-    } else if token.slice == "/*" {
-      j = lib.index_after(parser.str, j, "*/")
+    } else if lib.starts_with(token.slice, "/*") {
+      j := lib.index_after(parser.str, i + 2, "*/")
       token.slice = parser.str[i:j]
       token.type = int(TokenType.MultiLineComment)
       op_type = lib.OpType.Ignore
@@ -129,6 +128,9 @@ parse_ice :: proc(
     j = lib.index_newline(parser.str, j)
     token.slice = parser.str[i:j]
     token.type = int(TokenType.Command)
+    if lib.starts_with(token.slice, "? ") {
+      token.user_data = 1
+    }
     op_type = lib.OpType.Value
     return
   case '\n', '\r':
@@ -162,6 +164,9 @@ parse_ice :: proc(
       token.slice = parser.str[i:j]
       token.type = int(TokenType.Command)
       op_type = lib.OpType.Value
+      if lib.starts_with(token.slice, "? ") {
+        token.user_data = 1
+      }
     } else {
       lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
     }
@@ -310,14 +315,18 @@ run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
         }
         variables[name] = {variable_readonly, expand_string(string_value, variables)}
       case .Command:
-        command := expand_string(node.slice, variables)
+        is_optional := node.user_data != 0
+        command := is_optional ? node.slice[2:] : node.slice
+        command = expand_string(command, variables)
         // run the command
         if lib.starts_with(command, "rm ") || lib.starts_with(command, "del ") {
           assertf(false, "Suspicious command: '%v', aborting.", command)
         }
         fmt.println(command)
-        return_code := execute_command(command, variables)
-        assertf(return_code == 0, "Got return code %v, aborting.", return_code)
+        return_code := execute_command(command, is_optional, variables)
+        if !is_optional {
+          assertf(return_code == 0, "Got return code %v, aborting.", return_code)
+        }
       case:
         assertf(false, "Unsupported node.type: %v", TokenType(node.type))
       }

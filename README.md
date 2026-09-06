@@ -24,9 +24,10 @@ bar:                // declare a runnable
   echo "var: $var"   // run a command using an environment variable
   echo $$ARGS        // run a command using the rest of the commandline arguments
   $$COMMAND $$values // run a command using variables
+  ? command          // run a command, and continue even if it fails
 ```
 
-## Todo list
+## Todo list (do we need any of these?)
 - Print error line from config on error
 - escape strings in `$$$var`
 - `if` conditions
