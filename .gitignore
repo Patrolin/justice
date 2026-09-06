@@ -2,3 +2,4 @@
 *.obj
 *-linux-*
 tmp.odin
+tmp
