@@ -212,16 +212,32 @@ main :: proc() {
     append(&runnables_list, name)
   }
   // parse the args
-  if len(os.args) < 2 {
-    fmt.printfln("ice %v:", VERSION)
-    for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
-    return
+  arg_i := 1
+  print_env_vars := false
+  fail_on_missing_env_file := false
+  env_file_name := ".env"
+  for arg_i < len(os.args) {
+    next_arg := os.args[arg_i]
+    if strings.starts_with(next_arg, "-env:") {
+      env_file_name = strings.concatenate({".env.", next_arg[5:]})
+      fail_on_missing_env_file = true
+      arg_i += 1
+    } else if next_arg == "-p" {
+      print_env_vars = true
+      arg_i += 1
+    } else {
+      break
+    }
   }
-  selected_runnable_name := os.args[1]
+  selected_runnable_name := ""
+  if arg_i < len(os.args) {
+    selected_runnable_name = os.args[arg_i]
+    arg_i += 1
+  }
   args: strings.Builder
-  if (len(os.args) >= 3) {
-    fmt.sbprint(&args, os.args[2])
-    for arg in os.args[3:] {fmt.sbprintf(&args, " %v", arg)}
+  if len(os.args) > arg_i {
+    fmt.sbprint(&args, os.args[arg_i])
+    for arg in os.args[arg_i + 1:] {fmt.sbprintf(&args, " %v", arg)}
   }
   // add builtin constants
   variables := Variables{}
@@ -238,7 +254,11 @@ main :: proc() {
     variables[fmt.tprintf("$%v", key)] = Variable{true, value}
   }
   // add `.env` file
-  env_file, env_file_err := os.read_entire_file_from_path(".env", allocator = context.allocator)
+  env_file, env_file_err := os.read_entire_file_from_path(env_file_name, allocator = context.allocator)
+  if fail_on_missing_env_file {
+    assert(env_file_err == nil, fmt.tprintf("Failed to open %v", env_file_name))
+  }
+  debug_env_file_vars: map[string]string
   if env_file_err == nil {
     env_file := string(env_file)
     i := 0
@@ -249,10 +269,24 @@ main :: proc() {
       j = min(j + 1, len(env_file))
       k := lib.index_ascii(env_file, j, "#\r\n")
       right := strings.trim(env_file[j:k], " ")
-      if len(right) > 0 {variables[fmt.tprintf("$%v", left)] = Variable{true, right}}
+      if len(right) > 0 {
+        variables[fmt.tprintf("$%v", left)] = Variable{true, right}
+        debug_env_file_vars[left] = right
+      }
       l := lib.index_newline(env_file, k)
       i = lib.index_after_newline(env_file, l)
     }
+  }
+  // print help text
+  if selected_runnable_name == "" {
+    fmt.printfln("ice %v:", VERSION)
+    for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
+    if print_env_vars {
+      for k, v in debug_env_file_vars {
+        fmt.printf("$%v: \"%v\"", k, v)
+      }
+    }
+    return
   }
   // run the user setup code
   setup := ast.left

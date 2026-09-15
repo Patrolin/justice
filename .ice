@@ -13,3 +13,5 @@ test-fail:
 test-continue:
   ? ./fail.ps1
   echo "continued"
+print-env:
+  echo $version
