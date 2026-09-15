@@ -283,7 +283,7 @@ main :: proc() {
     for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
     if print_env_vars {
       for k, v in debug_env_file_vars {
-        fmt.printf("$%v: \"%v\"", k, v)
+        fmt.printf("$%v: '%v'\n", k, v)
       }
     }
     return
