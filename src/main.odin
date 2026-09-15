@@ -264,17 +264,29 @@ main :: proc() {
     i := 0
     j := 0
     for j < len(env_file) {
+      for {
+        i = lib.index_after_ascii(env_file, i, " \r\n")
+        if i < len(env_file) && env_file[i] == '#' {
+          i = lib.index_newline(env_file, i)
+        } else {
+          break
+        }
+      }
       j = lib.index_ascii(env_file, i, "=#\r\n")
       left := strings.trim(env_file[i:j], " ")
-      j = min(j + 1, len(env_file))
+      if j < len(env_file) && env_file[j] == '=' {
+        j = min(j + 1, len(env_file))
+      }
       k := lib.index_ascii(env_file, j, "#\r\n")
       right := strings.trim(env_file[j:k], " ")
       if len(right) > 0 {
+        if right[0] == '"' && right[len(right) - 1] == '"' {
+          right = right[1:len(right) - 1]
+        }
         variables[fmt.tprintf("$%v", left)] = Variable{true, right}
         debug_env_file_vars[left] = right
       }
-      l := lib.index_newline(env_file, k)
-      i = lib.index_after_newline(env_file, l)
+      i = lib.index_newline(env_file, k)
     }
   }
   // print help text
