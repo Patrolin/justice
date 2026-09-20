@@ -357,7 +357,9 @@ run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
         string_value := (^string)(expression.user_data)^
         if name in variables {
           current_variable := variables[name]
-          assertf(false, "Cannot redeclare %v '%v'", current_variable.readonly ? "constant" : "variable", name)
+          if current_variable.readonly {
+            assertf(false, "Cannot redeclare constant '%v'", name)
+          }
         }
         variables[name] = {variable_readonly, expand_string(string_value, variables)}
       case .Command:

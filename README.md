@@ -14,8 +14,8 @@ release:
 
 - `ice` - print version and runnable options
 - `ice <option_name>` - run the selected option
-- `ice -env:foo <option_name>` - run the selected option with a given env file
-- `ice -env:foo -p` - print variables from the given env file
+- `ice -env:<env_name> <option_name>` - run the selected option with env variables from the `.env.<env_name>` file
+- `ice -env:<env_name> -p` - print variables from the `.env.<env_name>` file
 
 ## Features
 ```
@@ -30,7 +30,7 @@ bar:                // declare a runnable
 ```
 
 ## Todo list (do we need any of these?)
-- Print error line from config on error
+- Print error line on error
 - escape strings in `$$$var`
 - `if` conditions
 - builtin `EXE(string)` -> add ".exe" suffix on windows?
