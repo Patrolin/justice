@@ -521,17 +521,18 @@ run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
         if lib.starts_with(command, "rm ") || lib.starts_with(command, "del ") {
           assertf(false, "Suspicious command: '%v', aborting.", command)
         }
-        fmt.println(command)
         if command == "cd" || lib.starts_with(command, "cd ") {
           diff := command[3:]
           if lib.starts_with(diff, "/") {
             starting_dir := data.variables["$PWD"].value.(string)
-            data.working_directory = strings.concatenate({starting_dir, diff})
+            data.working_directory = diff == "/" ? starting_dir : strings.concatenate({starting_dir, diff})
           } else {
             data.working_directory = strings.concatenate({data.working_directory, "/", diff})
           }
+          fmt.printfln("cd %v", data.working_directory)
           return
         }
+        fmt.println(command)
         return_code := execute_command(command, is_optional, data)
         if !is_optional {
           assertf(return_code == 0, "Got return code %v, aborting.", return_code)
