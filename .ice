@@ -16,6 +16,8 @@ test-continue:
   echo "continued"
 test-env:
   echo $version
+  echo $foo
+  echo $bar
 test-constant:
   x :: "1"
   x :: "$$x 2" // Error: Cannot redeclare constant 'x'
@@ -27,10 +29,14 @@ test-variable:
 test-unicode:
   echo "á"
 test-string:
-  FOO :: 'hello" world' // NOTE: powershell does not allow escaping strings...
-  echo '$$FOO'
-  BAR :: "hello' world"
-  echo "$$BAR"
+  FOO :: 'hello" $(pwd)'
+  echo '$$$$FOO'
+  echo "$$$FOO"
+  BAR :: "hello' $(pwd)"
+  echo '$$$$BAR'
+  echo "$$$BAR"
+  $BAZ :: "hello' $(pwd)"
+  echo "$BAZ"
 test-pwd:
   echo $(pwd).Path
   echo $PWD

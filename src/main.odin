@@ -8,7 +8,7 @@ import "core:strings"
 import "lib"
 
 VERSION :: #config(VERSION, "0")
-IS_DEBUG :: VERSION == "debug"
+IS_DEBUG_VERSION :: VERSION == "debug"
 
 // parser
 TokenType :: enum {
@@ -41,7 +41,8 @@ when ODIN_OS == .Windows {
   VARIABLE_CHARS :: "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 }
 VARIABLE_CONTINUE_CHARS :: VARIABLE_CHARS[1:]
-parse_string :: proc(parser: ^lib.TreeParser, i: int) -> (string, int) {
+/* Parse string and keep escape characters */
+parse_string_keep_escaped :: proc(parser: ^lib.TreeParser, i: int) -> (string, int) {
   i := i
   sb: strings.Builder
   start_char := parser.str[i]
@@ -63,6 +64,30 @@ parse_string :: proc(parser: ^lib.TreeParser, i: int) -> (string, int) {
   }
   fmt.sbprint(&sb, parser.str[i:j])
   return strings.to_string(sb), min(j + 1, len(parser.str))
+}
+escape_shell_characters_for_double_quoted_string :: proc(sb: ^strings.Builder, value: string) {
+  for char_u32 in value {
+    if char_u32 == '"' {
+      when ODIN_OS == .Windows {
+        fmt.sbprint(sb, '`')
+      } else {
+        fmt.sbprint(sb, '\\')
+      }
+    }
+    fmt.sbprint(sb, char_u32)
+  }
+}
+escape_shell_characters_for_single_quoted_string :: proc(sb: ^strings.Builder, value: string) {
+  for char_u32 in value {
+    if char_u32 == '\'' {
+      when ODIN_OS == .Windows {
+        fmt.sbprint(sb, '\'')
+      } else {
+        fmt.sbprint(sb, '\\')
+      }
+    }
+    fmt.sbprint(sb, char_u32)
+  }
 }
 parse_ice :: proc(
   parser: ^lib.TreeParser,
@@ -102,7 +127,7 @@ parse_ice :: proc(
     token.type = int(TokenType.Int)
     op_type = lib.OpType.Value
   case '"', '\'':
-    string_value, j := parse_string(parser, i)
+    string_value, j := parse_string_keep_escaped(parser, i)
     token.slice = parser.str[i:j]
     token.type = int(TokenType.String)
     string_slice := new(string)
@@ -204,7 +229,7 @@ parse_ice :: proc(
   return
 }
 assertf :: proc(condition: bool, format: string, args: ..any, loc := #caller_location) {
-  when IS_DEBUG {
+  when IS_DEBUG_VERSION {
     fmt.assertf(condition, format, ..args, loc = loc)
   } else {
     if intrinsics.expect(!condition, false) {
@@ -233,7 +258,7 @@ main :: proc() {
   assert(read_err == nil, "Failed to open .ice")
   // parse the config
   ast, parse_err := lib.parse_tree(string(config_file), parse_ice)
-  when IS_DEBUG {lib.print_ast(ast)}
+  when IS_DEBUG_VERSION {lib.print_ast(ast)}
   assert(len(parse_err) == 0, parse_err)
   // find runnable options
   runnables_map: map[string]^lib.ASTNode
@@ -250,6 +275,7 @@ main :: proc() {
   print_env_vars := false
   fail_on_missing_env_file := false
   env_file_name := ".env"
+  selected_runnable_name := ""
   for arg_i < len(os.args) {
     next_arg := os.args[arg_i]
     if strings.starts_with(next_arg, "-env:") {
@@ -259,14 +285,13 @@ main :: proc() {
     } else if next_arg == "-p" {
       print_env_vars = true
       arg_i += 1
+    } else if selected_runnable_name == "" {
+      selected_runnable_name = next_arg
+      arg_i += 1
+      continue
     } else {
-      break
+      assertf(false, "Unknown arg: %v", next_arg)
     }
-  }
-  selected_runnable_name := ""
-  if arg_i < len(os.args) {
-    selected_runnable_name = os.args[arg_i]
-    arg_i += 1
   }
   args: strings.Builder
   if len(os.args) > arg_i {
@@ -355,29 +380,54 @@ expand_string :: proc(str: string, variables: Variables) -> string {
   sb := strings.builder_make_none()
   i := 0
   for {
-    j := lib.index(str, i, "$")
+    j := lib.index_ascii_char(str, i, '$')
     fmt.sbprint(&sb, str[i:j])
     if j >= len(str) {break}
-    if j + 1 < len(str) && str[j + 1] == '$' {
-      // variable
-      k := lib.index_after_ascii(str, j + 2, VARIABLE_CONTINUE_CHARS)
-      variable_name := str[j + 2:k]
-      variable, variable_exists := variables[variable_name]
-      assertf(variable_exists, "Undeclared variable '%v'", variable_name)
-      fmt.sbprint(&sb, variable.value)
-      i = k
-    } else if j + 1 < len(str) && str[j + 1] != '(' && str[j + 1] != '{' {
-      // env variable
+    get_env_variable :: proc(sb: ^strings.Builder, str: string, j: int, variables: Variables, loc := #caller_location) -> int {
       k := lib.index_after_ascii(str, j + 1, VARIABLE_CONTINUE_CHARS)
+      if k == j + 1 {
+        fmt.sbprint(sb, rune(str[j]))
+        return j + 1
+      }
       variable_name := str[j:k]
       _, variable_exists := variables[variable_name]
-      assertf(variable_exists, "Undeclared variable '%v'", variable_name)
-      when ODIN_OS == .Windows {
-        fmt.sbprintf(&sb, "$env:%v", variable_name[1:])
-      } else {
-        fmt.sbprint(&sb, variable_name) // NOTE: posix shells already interpret `$var` correctly
+      if !variable_exists {
+        when IS_DEBUG_VERSION {fmt.printfln("str[j:]: '%v'", str[j:])}
+        assertf(false, "Error: Undeclared variable '%v'", variable_name, loc = loc)
       }
-      i = k
+      when ODIN_OS == .Windows {
+        fmt.sbprintf(sb, "$env:%v", variable_name[1:])
+      } else {
+        fmt.sbprint(sb, variable_name) // NOTE: posix shells already interpret `$var` correctly
+      }
+      return k
+    }
+    get_variable :: proc(sb: ^strings.Builder, str: string, j: int, variables: Variables, loc := #caller_location) -> int {
+      k := lib.index_after_ascii(str, j, VARIABLE_CONTINUE_CHARS)
+      variable_name := str[j:k]
+      variable, variable_exists := variables[variable_name]
+      assertf(variable_exists, "Error: Undeclared variable '%v'", variable_name, loc = loc)
+      fmt.sbprint(sb, variable.value)
+      return k
+    }
+    if j + 1 >= len(str) || str[j + 1] != '$' {
+      // env variable
+      i = get_env_variable(&sb, str, j, variables)
+    } else if j + 2 >= len(str) || str[j + 2] != '$' {
+      // variable
+      i = get_variable(&sb, str, j + 2, variables)
+    } else if j + 3 >= len(str) || str[j + 3] != '$' {
+      // escaped variable
+      value_sb: strings.Builder
+      i = get_variable(&value_sb, str, j + 3, variables)
+      value := strings.to_string(value_sb)
+      escape_shell_characters_for_double_quoted_string(&sb, value)
+    } else if j + 4 >= len(str) || str[j + 4] != '$' {
+      // escaped variable
+      value_sb: strings.Builder
+      i = get_variable(&value_sb, str, j + 4, variables)
+      value := strings.to_string(value_sb)
+      escape_shell_characters_for_single_quoted_string(&sb, value)
     } else {
       fmt.sbprint(&sb, rune(str[j]))
       i = j + 1
