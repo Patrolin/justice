@@ -296,7 +296,7 @@ main :: proc() {
         if right[0] == '"' && right[len(right) - 1] == '"' {
           right = right[1:len(right) - 1]
         }
-        data.variables[fmt.tprintf("$%v", left)] = Variable{true, right}
+        data.variables[fmt.tprintf("$%v", left)] = Variable{false, right}
         debug_env_file_vars[left] = right
       }
       i = lib.index_newline(env_file, k)
@@ -315,7 +315,7 @@ main :: proc() {
     for runnable in runnables_list {fmt.printfln("- ice %v", runnable)}
     if print_env_vars {
       for k, v in debug_env_file_vars {
-        fmt.printf("$%v: '%v'\n", k, v)
+        fmt.printf("$%v := \"%v\"\n", k, v)
       }
     }
     return

@@ -24,6 +24,8 @@ test-variable:
   x := "1"
   x := "$$x 2" // redeclare to update the variable
   echo "$$x"
+test-unicode:
+  echo "á"
 test-pwd:
   echo $(pwd).Path
   echo $PWD
