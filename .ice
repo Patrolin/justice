@@ -26,6 +26,11 @@ test-variable:
   echo "$$x"
 test-unicode:
   echo "á"
+test-string:
+  FOO :: 'hello" world' // NOTE: powershell does not allow escaping strings...
+  echo '$$FOO'
+  BAR :: "hello' world"
+  echo "$$BAR"
 test-pwd:
   echo $(pwd).Path
   echo $PWD

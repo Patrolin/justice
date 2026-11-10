@@ -30,9 +30,9 @@ bar:                // declare a runnable
 ```
 
 ## Todo list (do we need any of these?)
+- `if` conditions
 - Print error line on error
 - escape strings in `$$$var`
-- `if` conditions
 - builtin `EXE(string)` -> add ".exe" suffix on windows?
 - `params()` builtin for bools
 - `args += "-foo -bar"` to append arguments into a variable with implicit spaces

@@ -1,4 +1,5 @@
 // odin run src -out:ice-debug.exe -- release
+// odin build src -out:ice-debug.exe -define:VERSION=debug
 package main
 import "base:intrinsics"
 import "core:fmt"
@@ -33,13 +34,36 @@ TokenType :: enum {
   SingleLineComment,
   MultiLineComment,
 }
-RUNNABLE_CHARS :: "$-:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+RUNNABLE_CONTINUE_CHARS :: "$-:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 when ODIN_OS == .Windows {
   VARIABLE_CHARS :: "$:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 } else {
   VARIABLE_CHARS :: "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 }
 VARIABLE_CONTINUE_CHARS :: VARIABLE_CHARS[1:]
+parse_string :: proc(parser: ^lib.TreeParser, i: int) -> (string, int) {
+  i := i
+  sb: strings.Builder
+  start_char := parser.str[i]
+  assert(start_char == '"' || start_char == '\'')
+  j := i + 1
+  i = i + 1
+  for j < len(parser.str) {
+    char := parser.str[j]
+    if char == '\\' {
+      if j + 1 < len(parser.str) {
+        fmt.sbprint(&sb, parser.str[i:j + 2])
+        i = j + 2
+        j = j + 2
+      }
+    } else if char == start_char {
+      break
+    }
+    j += 1
+  }
+  fmt.sbprint(&sb, parser.str[i:j])
+  return strings.to_string(sb), min(j + 1, len(parser.str))
+}
 parse_ice :: proc(
   parser: ^lib.TreeParser,
   prev_node: ^lib.ASTNode,
@@ -77,18 +101,17 @@ parse_ice :: proc(
     token.slice = parser.str[i:j]
     token.type = int(TokenType.Int)
     op_type = lib.OpType.Value
-  case '"':
-    // TODO: parse strings properly
-    j := lib.index_ascii_char(parser.str, i + 1, '"') + 1
+  case '"', '\'':
+    string_value, j := parse_string(parser, i)
     token.slice = parser.str[i:j]
     token.type = int(TokenType.String)
-    string_value := new([]u8)
-    string_value^ = transmute([]u8)(token.slice[1:len(token.slice) - 1])
-    token.user_data = uintptr(string_value)
+    string_slice := new(string)
+    string_slice^ = string_value
+    token.user_data = uintptr(string_slice)
     op_type = lib.OpType.Value
   case '$', 'A' ..= 'Z', '_', 'a' ..= 'z':
     // try parsing a runnable
-    j := lib.index_after_ascii(parser.str, i, RUNNABLE_CHARS)
+    j := lib.index_after_ascii(parser.str, i, RUNNABLE_CONTINUE_CHARS)
     if parser.str[j - 1] == ':' {
       token.user_data = uintptr((j - 1) - i)
       j = lib.index_after_newline(parser.str, j)
@@ -376,12 +399,15 @@ run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
       case .DeclareAssignment:
         name := node.left.slice
         expression := node.right
-        assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
+        if TokenType(expression.type) != .String {
+          when ODIN_DEBUG {lib.print_ast(expression)}
+          assertf(false, "Unsupported expression type: %v", TokenType(expression.type))
+        }
         string_value := (^string)(expression.user_data)^
         if name in data.variables {
           current_variable := data.variables[name]
           if current_variable.readonly {
-            assertf(false, "Cannot redeclare constant '%v'", name)
+            assertf(false, "Error: Cannot redeclare constant '%v'", name)
           }
         }
         data.variables[name] = {variable_readonly, expand_string(string_value, data.variables)}
