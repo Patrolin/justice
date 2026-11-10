@@ -42,18 +42,18 @@ when ODIN_OS == .Windows {
 }
 VARIABLE_CONTINUE_CHARS :: VARIABLE_CHARS[1:]
 /* Parse string and keep escape characters */
-parse_string_keep_escaped :: proc(parser: ^lib.TreeParser, i: int) -> (string, int) {
+parse_string_keep_escaped :: proc(src: string, i: int) -> (string, int) {
   i := i
   sb: strings.Builder
-  start_char := parser.str[i]
+  start_char := src[i]
   assert(start_char == '"' || start_char == '\'')
   j := i + 1
   i = i + 1
-  for j < len(parser.str) {
-    char := parser.str[j]
+  for j < len(src) {
+    char := src[j]
     if char == '\\' {
-      if j + 1 < len(parser.str) {
-        fmt.sbprint(&sb, parser.str[i:j + 2])
+      if j + 1 < len(src) {
+        fmt.sbprint(&sb, src[i:j + 2])
         i = j + 2
         j = j + 2
       }
@@ -62,8 +62,8 @@ parse_string_keep_escaped :: proc(parser: ^lib.TreeParser, i: int) -> (string, i
     }
     j += 1
   }
-  fmt.sbprint(&sb, parser.str[i:j])
-  return strings.to_string(sb), min(j + 1, len(parser.str))
+  fmt.sbprint(&sb, src[i:j])
+  return strings.to_string(sb), min(j + 1, len(src))
 }
 escape_shell_characters_for_double_quoted_string :: proc(sb: ^strings.Builder, value: string) {
   for char_u32 in value {
@@ -127,7 +127,7 @@ parse_ice :: proc(
     token.type = int(TokenType.Int)
     op_type = lib.OpType.Value
   case '"', '\'':
-    string_value, j := parse_string_keep_escaped(parser, i)
+    string_value, j := parse_string_keep_escaped(parser.str, i)
     token.slice = parser.str[i:j]
     token.type = int(TokenType.String)
     string_slice := new(string)
@@ -338,12 +338,19 @@ main :: proc() {
       if j < len(env_file) && env_file[j] == '=' {
         j = min(j + 1, len(env_file))
       }
-      k := lib.index_ascii(env_file, j, "#\r\n")
-      right := strings.trim(env_file[j:k], " ")
+      j = lib.index_after_ascii_char(env_file, j, ' ')
+      right: string
+      k: int
+      if j < len(env_file) && env_file[j] == '"' {
+        // TODO: evaluate escapes
+        right, k = parse_string_keep_escaped(env_file, j)
+      } else if j < len(env_file) && env_file[j] == '\'' {
+        right, k = parse_string_keep_escaped(env_file, j)
+      } else {
+        k = lib.index_ascii(env_file, j, "#\r\n")
+        right = strings.trim(env_file[j:k], " ")
+      }
       if len(right) > 0 {
-        if right[0] == '"' && right[len(right) - 1] == '"' {
-          right = right[1:len(right) - 1]
-        }
         data.variables[fmt.tprintf("$%v", left)] = Variable{false, right}
         debug_env_file_vars[left] = right
       }

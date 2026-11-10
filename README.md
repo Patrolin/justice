@@ -27,8 +27,8 @@ bar:                // declare a runnable
   echo $$ARGS        // run a command using the rest of the commandline arguments
   $$COMMAND $$values // run a command using variables
   ? command          // run a command, and continue even if it fails
-  echo "$$$var"      // run a command using a variable and escape shell characters for double-quoted string
-  echo "$$$$var"     // run a command using a variable and escape shell characters for single-quoted string
+  echo "$$$var"      // run a command using a variable and escape characters for double-quoted shell string
+  echo "$$$$var"     // run a command using a variable and escape characters for single-quoted shell string
 ```
 
 ## Todo list (do we need any of these?)

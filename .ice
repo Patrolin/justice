@@ -18,6 +18,7 @@ test-env:
   echo $version
   echo $foo
   echo $bar
+  echo $baz
 test-constant:
   x :: "1"
   x :: "$$x 2" // Error: Cannot redeclare constant 'x'
