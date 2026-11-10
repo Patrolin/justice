@@ -30,6 +30,9 @@ test-pwd:
   cd src
   echo $(pwd).Path
   echo $PWD
+  cd /
+  echo $(pwd).Path
+  echo $PWD
 test-powershell-vars:
   $foo :: "1"
   echo $foo

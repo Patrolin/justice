@@ -396,7 +396,12 @@ run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
         fmt.println(command)
         if command == "cd" || lib.starts_with(command, "cd ") {
           diff := command[3:]
-          data.working_directory = strings.concatenate({data.working_directory, "/", diff})
+          if lib.starts_with(diff, "/") {
+            starting_dir := data.variables["$PWD"].value.(string)
+            data.working_directory = strings.concatenate({starting_dir, diff})
+          } else {
+            data.working_directory = strings.concatenate({data.working_directory, "/", diff})
+          }
           return
         }
         return_code := execute_command(command, is_optional, data)
