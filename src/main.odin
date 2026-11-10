@@ -33,6 +33,13 @@ TokenType :: enum {
   SingleLineComment,
   MultiLineComment,
 }
+RUNNABLE_CHARS :: "$-:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+when ODIN_OS == .Windows {
+  VARIABLE_CHARS :: "$:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+} else {
+  VARIABLE_CHARS :: "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+}
+VARIABLE_CONTINUE_CHARS :: VARIABLE_CHARS[1:]
 parse_ice :: proc(
   parser: ^lib.TreeParser,
   prev_node: ^lib.ASTNode,
@@ -81,7 +88,7 @@ parse_ice :: proc(
     op_type = lib.OpType.Value
   case '$', 'A' ..= 'Z', '_', 'a' ..= 'z':
     // try parsing a runnable
-    j := lib.index_after_ascii(parser.str, i, "$-:0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+    j := lib.index_after_ascii(parser.str, i, RUNNABLE_CHARS)
     if parser.str[j - 1] == ':' {
       token.user_data = uintptr((j - 1) - i)
       j = lib.index_after_newline(parser.str, j)
@@ -92,7 +99,7 @@ parse_ice :: proc(
       break
     }
     /* NOTE: most linux shells only allow `[A-Z_a-z][0-9A-Z_a-z]*` */
-    j = lib.index_after_ascii(parser.str, i, "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+    j = lib.index_after_ascii(parser.str, i, VARIABLE_CHARS)
     token.slice = parser.str[i:j]
     if token.slice == "if" {
       if true {
@@ -185,6 +192,11 @@ assertf :: proc(condition: bool, format: string, args: ..any, loc := #caller_loc
 }
 
 // interpreter
+InterpreterData :: struct {
+  variables:         Variables,
+  working_directory: string,
+}
+Variables :: map[string]Variable
 Variable :: struct {
   readonly: bool,
   value:    union {
@@ -192,7 +204,6 @@ Variable :: struct {
     string,
   },
 }
-Variables :: map[string]Variable
 main :: proc() {
   // read config from `.ice`
   config_file, read_err := os.read_entire_file(".ice", allocator = context.allocator)
@@ -240,18 +251,20 @@ main :: proc() {
     for arg in os.args[arg_i + 1:] {fmt.sbprintf(&args, " %v", arg)}
   }
   // add builtin constants
-  variables := Variables{}
-  variables["ARGS"] = Variable{true, strings.to_string(args)}
-  if ODIN_OS == .Windows {variables["OS_WINDOWS"] = Variable{true, 1}}
-  if ODIN_OS == .Linux {variables["OS_LINUX"] = Variable{true, 1}}
+  data := InterpreterData{}
+  data.variables["ARGS"] = Variable{true, strings.to_string(args)}
+  if ODIN_OS == .Windows {data.variables["OS_WINDOWS"] = Variable{true, 1}}
+  if ODIN_OS == .Linux {data.variables["OS_LINUX"] = Variable{true, 1}}
   // add environment variables
   default_env, default_env_err := os.environ(context.temp_allocator)
   fmt.assertf(default_env_err == nil, "Failed to get environment")
   for assignment in default_env {
+    if len(assignment) == 0 {continue}
     j := lib.index_ascii_char(assignment, 0, '=')
     key := assignment[:j]
-    value := assignment[j + 1:len(assignment)]
-    variables[fmt.tprintf("$%v", key)] = Variable{true, value}
+    k := j + 1
+    value := assignment[k:len(assignment)]
+    data.variables[fmt.tprintf("$%v", key)] = Variable{true, value}
   }
   // add `.env` file
   env_file, env_file_err := os.read_entire_file_from_path(env_file_name, allocator = context.allocator)
@@ -283,11 +296,18 @@ main :: proc() {
         if right[0] == '"' && right[len(right) - 1] == '"' {
           right = right[1:len(right) - 1]
         }
-        variables[fmt.tprintf("$%v", left)] = Variable{true, right}
+        data.variables[fmt.tprintf("$%v", left)] = Variable{true, right}
         debug_env_file_vars[left] = right
       }
       i = lib.index_newline(env_file, k)
     }
+  }
+  working_directory, working_directory_err := os.get_working_directory(context.allocator)
+  assert(working_directory_err == nil)
+  data.working_directory = working_directory
+  data.variables["$PWD"] = Variable {
+    readonly = true,
+    value    = data.working_directory,
   }
   // print help text
   if selected_runnable_name == "" {
@@ -302,13 +322,13 @@ main :: proc() {
   }
   // run the user setup code
   setup := ast.left
-  run_interpreter(setup, &variables)
+  run_interpreter(setup, &data)
   // run the selected runnable
   selected_runnable, runnable_exists := runnables_map[selected_runnable_name]
   assertf(runnable_exists, "Runnable '%v' does not exist.", selected_runnable_name)
-  run_interpreter(selected_runnable, &variables)
+  run_interpreter(selected_runnable, &data)
 }
-expand_string :: proc(str: string, variables: ^Variables) -> string {
+expand_string :: proc(str: string, variables: Variables) -> string {
   sb := strings.builder_make_none()
   i := 0
   for {
@@ -317,15 +337,15 @@ expand_string :: proc(str: string, variables: ^Variables) -> string {
     if j >= len(str) {break}
     if j + 1 < len(str) && str[j + 1] == '$' {
       // variable
-      k := lib.index_after_ascii(str, j + 2, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+      k := lib.index_after_ascii(str, j + 2, VARIABLE_CONTINUE_CHARS)
       variable_name := str[j + 2:k]
       variable, variable_exists := variables[variable_name]
       assertf(variable_exists, "Undeclared variable '%v'", variable_name)
       fmt.sbprint(&sb, variable.value)
       i = k
-    } else {
+    } else if j + 1 < len(str) && str[j + 1] != '(' && str[j + 1] != '{' {
       // env variable
-      k := lib.index_after_ascii(str, j + 1, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz")
+      k := lib.index_after_ascii(str, j + 1, VARIABLE_CONTINUE_CHARS)
       variable_name := str[j:k]
       _, variable_exists := variables[variable_name]
       assertf(variable_exists, "Undeclared variable '%v'", variable_name)
@@ -335,16 +355,19 @@ expand_string :: proc(str: string, variables: ^Variables) -> string {
         fmt.sbprint(&sb, variable_name) // NOTE: posix shells already interpret `$var` correctly
       }
       i = k
+    } else {
+      fmt.sbprint(&sb, rune(str[j]))
+      i = j + 1
     }
   }
   return strings.to_string(sb)
 }
-run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
+run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
   walk_ast_lines(
     parent,
-    variables,
+    data,
     proc(node: ^lib.ASTNode, user_data: rawptr) {
-      variables := (^Variables)(user_data)
+      data := (^InterpreterData)(user_data)
       variable_readonly := false
       #partial switch TokenType(node.type) {
       case .DeclareConstant:
@@ -355,23 +378,28 @@ run_interpreter :: proc(parent: ^lib.ASTNode, variables: ^Variables) {
         expression := node.right
         assertf(TokenType(expression.type) == .String, "Unsupported expression type: %v", TokenType(expression.type))
         string_value := (^string)(expression.user_data)^
-        if name in variables {
-          current_variable := variables[name]
+        if name in data.variables {
+          current_variable := data.variables[name]
           if current_variable.readonly {
             assertf(false, "Cannot redeclare constant '%v'", name)
           }
         }
-        variables[name] = {variable_readonly, expand_string(string_value, variables)}
+        data.variables[name] = {variable_readonly, expand_string(string_value, data.variables)}
       case .Command:
         is_optional := node.user_data != 0
         command := is_optional ? node.slice[2:] : node.slice
-        command = expand_string(command, variables)
+        command = expand_string(command, data.variables)
         // run the command
         if lib.starts_with(command, "rm ") || lib.starts_with(command, "del ") {
           assertf(false, "Suspicious command: '%v', aborting.", command)
         }
         fmt.println(command)
-        return_code := execute_command(command, is_optional, variables)
+        if command == "cd" || lib.starts_with(command, "cd ") {
+          diff := command[3:]
+          data.working_directory = strings.concatenate({data.working_directory, "/", diff})
+          return
+        }
+        return_code := execute_command(command, is_optional, data)
         if !is_optional {
           assertf(return_code == 0, "Got return code %v, aborting.", return_code)
         }

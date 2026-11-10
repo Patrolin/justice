@@ -26,9 +26,9 @@ _build_environment_block :: proc(environment: []string, allocator: runtime.Alloc
 }
 
 @(require_results)
-execute_command :: proc(command: string, is_optional: bool, variables: ^Variables) -> int {
+execute_command :: proc(command: string, is_optional: bool, data: ^InterpreterData) -> int {
   env: [dynamic]string
-  for key, variable in variables {
+  for key, variable in data.variables {
     if key[0] == '$' {
       append(&env, fmt.tprintf("%v=%v", key[1:], variable.value))
     }
@@ -38,7 +38,13 @@ execute_command :: proc(command: string, is_optional: bool, variables: ^Variable
   } else {
     full_command := []string{"sh", "-c", command}
   }
-  process, process_create_err := os.process_start({command = full_command, stdout = os.stdout, stderr = os.stderr, env = env[:]})
+  process, process_create_err := os.process_start({
+    command     = full_command,
+    stdout      = os.stdout,
+    stderr      = os.stderr,
+    env         = env[:],
+    working_dir = data.working_directory,
+  })
   if !is_optional {
     fmt.assertf(process_create_err == nil, "create_process_err: %v", process_create_err)
   }

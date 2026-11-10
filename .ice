@@ -24,3 +24,14 @@ test-variable:
   x := "1"
   x := "$$x 2" // redeclare to update the variable
   echo "$$x"
+test-pwd:
+  echo $(pwd).Path
+  echo $PWD
+  cd src
+  echo $(pwd).Path
+  echo $PWD
+test-powershell-vars:
+  $foo :: "1"
+  echo $foo
+  $foo:bar :: "2"
+  echo $foo:bar
