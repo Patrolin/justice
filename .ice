@@ -14,7 +14,7 @@ test-fail:
 test-continue:
   ? ./fail.ps1
   echo "continued"
-test-env:
+test-env: // ice test-env -env:example
   echo $version
   echo $foo
   echo $bar
