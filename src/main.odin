@@ -65,6 +65,46 @@ parse_string_keep_escaped :: proc(src: string, i: int) -> (string, int) {
   fmt.sbprint(&sb, src[i:j])
   return strings.to_string(sb), min(j + 1, len(src))
 }
+parse_string_evaluate_escapes :: proc(src: string, i: int) -> (string, int) {
+  i := i
+  sb: strings.Builder
+  start_char := src[i]
+  assert(start_char == '"' || start_char == '\'')
+  j := i + 1
+  i = i + 1
+  for j < len(src) {
+    char := src[j]
+    if char == '\\' {
+      fmt.sbprint(&sb, src[i:j])
+      if j + 1 < len(src) {
+        next_char := src[j + 1]
+        switch next_char {
+        case 't':
+          fmt.sbprint(&sb, '\t')
+        case 'n':
+          fmt.sbprint(&sb, '\n')
+        case 'v':
+          fmt.sbprint(&sb, '\v')
+        case 'f':
+          fmt.sbprint(&sb, '\f')
+        case 'r':
+          fmt.sbprint(&sb, '\r')
+        case:
+          fmt.sbprint(&sb, rune(next_char))
+        }
+        i = j + 2
+        j = j + 2
+      } else {
+        fmt.sbprint(&sb, "\\\\")
+      }
+    } else if char == start_char {
+      break
+    }
+    j += 1
+  }
+  fmt.sbprint(&sb, src[i:j])
+  return strings.to_string(sb), min(j + 1, len(src))
+}
 escape_shell_characters_for_double_quoted_string :: proc(sb: ^strings.Builder, value: string) {
   for char_u32 in value {
     if char_u32 == '"' {
@@ -127,7 +167,13 @@ parse_ice :: proc(
     token.type = int(TokenType.Int)
     op_type = lib.OpType.Value
   case '"', '\'':
-    string_value, j := parse_string_keep_escaped(parser.str, i)
+    string_value: string
+    j: int
+    if first_char == '"' {
+      string_value, j = parse_string_evaluate_escapes(parser.str, i)
+    } else {
+      string_value, j = parse_string_keep_escaped(parser.str, i)
+    }
     token.slice = parser.str[i:j]
     token.type = int(TokenType.String)
     string_slice := new(string)
@@ -342,8 +388,7 @@ main :: proc() {
       right: string
       k: int
       if j < len(env_file) && env_file[j] == '"' {
-        // TODO: evaluate escapes
-        right, k = parse_string_keep_escaped(env_file, j)
+        right, k = parse_string_evaluate_escapes(env_file, j)
       } else if j < len(env_file) && env_file[j] == '\'' {
         right, k = parse_string_keep_escaped(env_file, j)
       } else {

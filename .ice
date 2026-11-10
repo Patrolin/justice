@@ -30,14 +30,18 @@ test-variable:
 test-unicode:
   echo "á"
 test-string:
-  FOO :: 'hello" $(pwd)'
-  echo '$$$$FOO'
+  FOO := "evaluate\nescapes"
+  echo "$$FOO"
+  FOO := 'preserve\nescapes'
+  echo "$$FOO"
+  FOO := 'hello" $(pwd)'
   echo "$$$FOO"
-  BAR :: "hello' $(pwd)"
-  echo '$$$$BAR'
-  echo "$$$BAR"
-  $BAZ :: "hello' $(pwd)"
-  echo "$BAZ"
+  echo '$$$$FOO'
+  FOO := "hello' $(pwd)"
+  echo "$$$FOO"
+  echo '$$$$FOO'
+  $BAR :: "hello' $(pwd)"
+  echo "$BAR"
 test-pwd:
   echo $(pwd).Path
   echo $PWD
