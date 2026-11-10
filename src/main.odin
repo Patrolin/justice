@@ -123,7 +123,7 @@ escape_shell_characters_for_single_quoted_string :: proc(sb: ^strings.Builder, v
       when ODIN_OS == .Windows {
         fmt.sbprint(sb, '\'')
       } else {
-        fmt.sbprint(sb, '\\')
+        fmt.sbprint(sb, "'\\'") // who designed this...
       }
     }
     fmt.sbprint(sb, char_u32)
