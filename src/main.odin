@@ -433,15 +433,29 @@ expand_string :: proc(str: string, variables: Variables) -> string {
   i := 0
   for {
     j := lib.index_ascii_char(str, i, '$')
-    fmt.sbprint(&sb, str[i:j])
-    if j >= len(str) {break}
-    get_env_variable :: proc(sb: ^strings.Builder, str: string, j: int, variables: Variables, loc := #caller_location) -> int {
+    if j >= len(str) {
+      fmt.sbprint(&sb, str[i:j])
+      break
+    }
+
+    get_env_variable :: proc(
+      sb: ^strings.Builder,
+      str: string,
+      j: int,
+      variables: Variables,
+      by_value: bool,
+      loc := #caller_location,
+    ) -> int {
       k := lib.index_after_ascii(str, j + 1, VARIABLE_CONTINUE_CHARS)
-      if k == j + 1 {
-        fmt.sbprint(sb, rune(str[j]))
-        return j + 1
+      variable_name := fmt.tprintf("$%v", str[j:k])
+      // by value
+      if by_value {
+        variable, variable_exists := variables[variable_name]
+        assertf(variable_exists, "Error: Undeclared variable '%v'", variable_name, loc = loc)
+        fmt.sbprint(sb, variable.value)
+        return k
       }
-      variable_name := str[j:k]
+      // by name
       _, variable_exists := variables[variable_name]
       if !variable_exists {
         when IS_DEBUG_VERSION {fmt.printfln("str[j:]: '%v'", str[j:])}
@@ -458,30 +472,57 @@ expand_string :: proc(str: string, variables: Variables) -> string {
       k := lib.index_after_ascii(str, j, VARIABLE_CONTINUE_CHARS)
       variable_name := str[j:k]
       variable, variable_exists := variables[variable_name]
-      assertf(variable_exists, "Error: Undeclared variable '%v'", variable_name, loc = loc)
+      if !variable_exists {
+        when IS_DEBUG_VERSION {fmt.printfln("str[j:]: '%v'", str[j:])}
+        assertf(false, "Error: Undeclared variable '%v'", variable_name, loc = loc)
+      }
       fmt.sbprint(sb, variable.value)
       return k
     }
     if j + 1 >= len(str) || str[j + 1] != '$' {
-      // env variable
-      i = get_env_variable(&sb, str, j, variables)
+      switch str[j + 1] {
+      case '"':
+        // env variable name
+        fmt.sbprint(&sb, str[i:j])
+        i = get_env_variable(&sb, str, j + 2, variables, false)
+      case '\'':
+        // ' escaped env variable
+        fmt.sbprint(&sb, str[i:j])
+        value_sb: strings.Builder
+        i = get_env_variable(&value_sb, str, j + 2, variables, true)
+        value := strings.to_string(value_sb)
+        escape_shell_characters_for_single_quoted_string(&sb, value)
+      case '0' ..= '9', 'A' ..= 'Z', '_', 'a' ..= 'z':
+        // NOTE: must match `VARIABLE_CONTINUE_CHARS`
+        // env variable
+        fmt.sbprint(&sb, str[i:j])
+        i = get_env_variable(&sb, str, j + 1, variables, true)
+      case:
+        // non variable character
+        fmt.sbprint(&sb, str[i:j + 1])
+        i = j + 1
+      }
     } else if j + 2 >= len(str) || str[j + 2] != '$' {
-      // variable
-      i = get_variable(&sb, str, j + 2, variables)
-    } else if j + 3 >= len(str) || str[j + 3] != '$' {
-      // escaped variable
-      value_sb: strings.Builder
-      i = get_variable(&value_sb, str, j + 3, variables)
-      value := strings.to_string(value_sb)
-      escape_shell_characters_for_double_quoted_string(&sb, value)
-    } else if j + 4 >= len(str) || str[j + 4] != '$' {
-      // escaped variable
-      value_sb: strings.Builder
-      i = get_variable(&value_sb, str, j + 4, variables)
-      value := strings.to_string(value_sb)
-      escape_shell_characters_for_single_quoted_string(&sb, value)
+      fmt.sbprint(&sb, str[i:j])
+      switch str[j + 2] {
+      case '"':
+        // " escaped variable
+        value_sb: strings.Builder
+        i = get_variable(&value_sb, str, j + 3, variables)
+        value := strings.to_string(value_sb)
+        escape_shell_characters_for_double_quoted_string(&sb, value)
+      case '\'':
+        // ' escaped variable
+        value_sb: strings.Builder
+        i = get_variable(&value_sb, str, j + 3, variables)
+        value := strings.to_string(value_sb)
+        escape_shell_characters_for_single_quoted_string(&sb, value)
+      case:
+        // variable
+        i = get_variable(&sb, str, j + 2, variables)
+      }
     } else {
-      fmt.sbprint(&sb, rune(str[j]))
+      fmt.sbprint(&sb, str[i:j + 1])
       i = j + 1
     }
   }

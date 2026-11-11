@@ -30,18 +30,28 @@ test-variable:
 test-unicode:
   echo "á"
 test-string:
+  // parsing
   FOO := "evaluate\nescapes"
   echo "$$FOO"
   FOO := 'preserve\nescapes'
   echo "$$FOO"
+  // formatting
+  $BAR := 'hello" $(pwd)'
+  echo 'env-dq: $BAR'
+  echo "env-dq: $"BAR"
+  echo 'env-dq: $'BAR'
+  $BAR := "hello' $(pwd)"
+  echo "env-sq: $BAR"
+  echo "env-sq: $"BAR"
+  echo 'env-sq: $'BAR'
   FOO := 'hello" $(pwd)'
-  echo "$$$FOO"
-  echo '$$$$FOO'
+  echo 'var-sq: $$FOO'
+  echo "var-sq: $$"FOO"
+  echo 'var-sq: $$'FOO'
   FOO := "hello' $(pwd)"
-  echo "$$$FOO"
-  echo '$$$$FOO'
-  $BAR :: "hello' $(pwd)"
-  echo "$BAR"
+  echo "var-dq: $$FOO"
+  echo "var-dq: $$"FOO"
+  echo 'var-dq: $$'FOO'
 test-pwd:
   echo $(pwd).Path
   echo $PWD

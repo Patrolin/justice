@@ -29,8 +29,12 @@ bar:                // declare a runnable
   ? command          // run a command, and continue even if it fails
   FOO :: "hello\nworld" // declare a string, evaluating escape chars (\t\n\v\f\r)
   BAR :: 'hello\nworld' // declare a string, preserving escape chars
-  echo "$$$var"         // escape " for double-quoted shell string
-  echo '$$$$var'        // escape ' for single-quoted shell string
+  echo $var             // paste the environment variable directly
+  echo "$"var"          // format the name of an environment variable for " strings
+  echo '$'var'          // format the environment variable for ' strings
+  echo $$var            // paste the variable directly
+  echo "$$"var"         // format the variable for " strings
+  echo '$$'var'         // format the variable for ' strings
 ```
 
 ## Todo list (do we need any of these?)
