@@ -46,5 +46,5 @@ bar:                // declare a runnable
 - builtin `EXE(string)` -> add ".exe" suffix on windows?
 - `params()` builtin for bools
 - `args += "-foo -bar"` to append arguments into a variable with implicit spaces
-- ability to run substeps via `step()`
+- ability to run substeps via `! step`
 - builtin functions for cleaning dirs safely
