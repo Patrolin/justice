@@ -14,8 +14,9 @@ release:
 
 - `ice` - print version and runnable options
 - `ice <option_name>` - run the selected option
-- `ice -env:<env_name> <option_name>` - run the selected option with env variables from the `.env.<env_name>` file
-- `ice -env:<env_name> -p` - print variables from the `.env.<env_name>` file
+- `ice <option_name> -env:<env_name>` - run the selected option with env variables from the `.env.<env_name>` file
+- `ice -p` - print variables from the default `.env` file
+- `ice -p -env:<env_name>` - print variables from the `.env.<env_name>` file
 
 ## Features
 ```
