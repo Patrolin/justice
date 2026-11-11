@@ -521,6 +521,24 @@ expand_string :: proc(str: string, variables: Variables) -> string {
         // variable
         i = get_variable(&sb, str, j + 2, variables)
       }
+    } else if j + 2 < len(str) && str[j + 2] == '$' {
+      fmt.sbprint(&sb, str[i:j])
+      next_char: u8
+      if j + 3 < len(str) {
+        next_char = str[j + 3]
+      }
+      switch next_char {
+      case '"':
+        when ODIN_OS == .Windows {
+          fmt.sbprint(&sb, "`$")
+        } else {
+          fmt.sbprint(&sb, "\\$")
+        }
+        i = j + 4
+      case:
+        fmt.sbprint(&sb, '$')
+        i = j + 3
+      }
     } else {
       fmt.sbprint(&sb, str[i:j + 1])
       i = j + 1

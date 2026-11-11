@@ -52,6 +52,9 @@ test-string:
   echo "var-dq: $$FOO"
   echo "var-dq: $$"FOO"
   echo 'var-dq: $$'FOO'
+  $BAR := "e'v\"il"
+  BAR_ESCAPED :: "$'BAR"
+  echo "$$$"BAR = '$$"BAR_ESCAPED'"
 test-pwd:
   echo $(pwd).Path
   echo $PWD

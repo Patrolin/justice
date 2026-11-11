@@ -35,6 +35,8 @@ bar:                // declare a runnable
   echo $$var            // paste the variable directly
   echo "$$"var"         // format the variable for " strings
   echo '$$'var'         // format the variable for ' strings
+  VAR_ESCAPED :: "$'var"            // escape for inner ' string
+  echo "$$$"VAR = '$$"VAR_ESCAPED'" // print name and value and escape for outer " string
 ```
 
 ## Todo list (do we need any of these?)
