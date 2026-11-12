@@ -140,7 +140,7 @@ parent_node_is_expression :: proc(parent_node: ^lib.ASTNode) -> bool {
   //fmt.printfln("parent_node: %v", parent_node)
   if parent_node == nil {return false}
   #partial switch TokenType(parent_node.type) {
-  case .DeclareConstant, .DeclareAssignment, .BitAnd, .Plus, .Minus, .BitOr, .LogicalNot, .LeftBracket:
+  case .DeclareConstant, .DeclareAssignment, .BitAnd, .Plus, .Minus, .BitOr, .LogicalAnd, .LogicalOr, .LogicalNot, .LeftBracket:
     return true
   case:
     return false
@@ -640,11 +640,11 @@ eval_expression :: proc(node: ^lib.ASTNode, data: ^InterpreterData) -> VariableV
     return left - right
   case .LogicalAnd:
     left := eval_expression_as_bool(node.left, data)
-    right := eval_expression_as_bool(node.left, data)
+    right := eval_expression_as_bool(node.right, data)
     return int(left && right)
   case .LogicalOr:
     left := eval_expression_as_bool(node.left, data)
-    right := eval_expression_as_bool(node.left, data)
+    right := eval_expression_as_bool(node.right, data)
     return int(left || right)
   case .LogicalNot:
     left := eval_expression_as_bool(node.left, data)
