@@ -1,5 +1,5 @@
 // bootstrap:
-/* odin run src -out:ice-debug.exe -define:VERSION=debug -- release */
+/* odin run src -out:ice-debug.exe -- release */
 FLAGS :: "-o:size"
 
 run:
