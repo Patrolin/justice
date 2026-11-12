@@ -259,7 +259,6 @@ parse_ice :: proc(
       token.slice = parser.str[i:i + 2]
       token.type = int(TokenType.IfStatement)
       op_type = lib.OpType.BinarySuffix
-      precedence = 9
     } else {
       token.type = int(TokenType.Command)
       op_type = lib.OpType.Value
