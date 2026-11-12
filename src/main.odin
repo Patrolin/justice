@@ -599,6 +599,10 @@ eval_expression :: proc(node: ^lib.ASTNode, data: ^InterpreterData) -> VariableV
     right, right_is_int := eval_expression(node.right, data).(int)
     assertf(left_is_int && right_is_int, "Unsupported operator - between %v and %v", left, right)
     return left - right
+  case .LogicalNot:
+    left, left_is_int := eval_expression(node.left, data).(int)
+    assertf(left_is_int, "Unsupported operator ! for %v", left)
+    return int(left == 0)
   case .Name:
     name := node.slice
     value, variable_exists := data.variables[name]

@@ -76,3 +76,5 @@ test-os:
   echo "OS_BSD: $$OS_BSD"
   OS_UNIX :: OS_LINUX | OS_MAC | OS_BSD
   echo "OS_UNIX: $$OS_UNIX"
+  OS_NOT_WINDOWS :: !OS_WINDOWS
+  echo "OS_NOT_WINDOWS: $$OS_NOT_WINDOWS"
