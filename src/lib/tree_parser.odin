@@ -20,7 +20,15 @@ TreeParser :: struct {
   error:         string,
   bracket_count: int,
 }
-ParserProc :: proc(parser: ^TreeParser, prev_node: ^ASTNode) -> (token: Token, op_type: OpType, precedence: int, right_associative: bool)
+ParserProc :: proc(
+  parser: ^TreeParser,
+  prev_node, parent_node: ^ASTNode,
+) -> (
+  token: Token,
+  op_type: OpType,
+  precedence: int,
+  right_associative: bool,
+)
 ASTNode :: struct {
   using token: Token,
   left, right: ^ASTNode,
@@ -46,11 +54,18 @@ report_parser_error :: proc(parser: ^TreeParser, error: string) {
   if len(parser.error) == 0 {parser.error = error}
 }
 @(private = "file")
-_parse_recursively :: proc(parser: ^TreeParser, min_precedence: int, allocator := context.temp_allocator) -> (prev_node: ^ASTNode) {
+_parse_recursively :: proc(
+  parser: ^TreeParser,
+  min_precedence: int,
+  parent_node: ^ASTNode,
+  allocator := context.temp_allocator,
+) -> (
+  prev_node: ^ASTNode,
+) {
   unary_tail := prev_node
   unary_tail_is_value := false
   for parser.keep_going {
-    token, op_type, precedence, right_associative := parser.parser_proc(parser, prev_node)
+    token, op_type, precedence, right_associative := parser.parser_proc(parser, prev_node, parent_node)
     if len(token.slice) == 0 || !parser.keep_going {
       report_parser_error(parser, fmt.tprintf("Cannot have token of length 0: %v", token))
       return
@@ -62,7 +77,7 @@ _parse_recursively :: proc(parser: ^TreeParser, min_precedence: int, allocator :
       node := new(ASTNode, allocator = allocator)
       node.token = token
       node.left = prev_node
-      node.right = _parse_recursively(parser, precedence, allocator = allocator)
+      node.right = _parse_recursively(parser, precedence, node, allocator = allocator)
       prev_node = node
       unary_tail_is_value = true
     case OpType.Ignore:
@@ -77,9 +92,9 @@ _parse_recursively :: proc(parser: ^TreeParser, min_precedence: int, allocator :
       if op_type == .LeftBracket {
         // left bracket
         parser.bracket_count += 1
-        node = _parse_recursively(parser, -1, allocator = allocator)
+        node = _parse_recursively(parser, -1, nil, allocator = allocator)
         // right bracket
-        next_token, next_op_type, _, _ := parser.parser_proc(parser, prev_node)
+        next_token, next_op_type, _, _ := parser.parser_proc(parser, prev_node, parent_node)
         if next_op_type != .RightBracket {
           report_parser_error(parser, "Unclosed left bracket")
           return
@@ -118,7 +133,7 @@ parse_tree :: proc(
     keep_going  = true,
     error       = "",
   }
-  result := _parse_recursively(&parser, -1, allocator = allocator)
+  result := _parse_recursively(&parser, -1, nil, allocator = allocator)
   return result, parser.error
 }
 

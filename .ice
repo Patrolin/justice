@@ -69,3 +69,10 @@ test-powershell-vars:
   echo $foo
   $foo:bar :: "2"
   echo $foo:bar
+test-os:
+  echo "OS_WINDOWS: $$OS_WINDOWS"
+  echo "OS_LINUX: $$OS_LINUX"
+  echo "OS_MAC: $$OS_MAC"
+  echo "OS_BSD: $$OS_BSD"
+  OS_UNIX :: OS_LINUX | OS_MAC | OS_BSD
+  echo "OS_UNIX: $$OS_UNIX"
