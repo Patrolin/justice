@@ -23,6 +23,8 @@ TokenType :: enum {
   Plus,
   Minus,
   BitOr,
+  LogicalAnd,
+  LogicalOr,
   // values
   Int,
   String,
@@ -285,9 +287,15 @@ parse_ice :: proc(
     }
   case '&':
     // NOTE: follow https://odin-lang.org/docs/overview/#operator-precedence
-    token.slice = parser.str[i:i + 1]
-    token.type = int(TokenType.BitAnd)
-    precedence = 17
+    if i + 1 < len(parser.str) && parser.str[i + 1] == '&' {
+      token.slice = parser.str[i:i + 2]
+      token.type = int(TokenType.LogicalAnd)
+      precedence = 14
+    } else {
+      token.slice = parser.str[i:i + 1]
+      token.type = int(TokenType.BitAnd)
+      precedence = 17
+    }
   case '+':
     token.slice = parser.str[i:i + 1]
     token.type = int(TokenType.Plus)
@@ -297,9 +305,15 @@ parse_ice :: proc(
     token.type = int(TokenType.Minus)
     precedence = 16
   case '|':
-    token.slice = parser.str[i:i + 1]
-    token.type = int(TokenType.BitOr)
-    precedence = 16
+    if i + 1 < len(parser.str) && parser.str[i + 1] == '|' {
+      token.slice = parser.str[i:i + 2]
+      token.type = int(TokenType.LogicalOr)
+      precedence = 13
+    } else {
+      token.slice = parser.str[i:i + 1]
+      token.type = int(TokenType.BitOr)
+      precedence = 16
+    }
   case '!':
     token.slice = parser.str[i:i + 1]
     token.type = int(TokenType.LogicalNot)
@@ -624,14 +638,17 @@ eval_expression :: proc(node: ^lib.ASTNode, data: ^InterpreterData) -> VariableV
     right, right_is_int := eval_expression(node.right, data).(int)
     assertf(left_is_int && right_is_int, "Unsupported operator - between %v and %v", left, right)
     return left - right
+  case .LogicalAnd:
+    left := eval_expression_as_bool(node.left, data)
+    right := eval_expression_as_bool(node.left, data)
+    return int(left && right)
+  case .LogicalOr:
+    left := eval_expression_as_bool(node.left, data)
+    right := eval_expression_as_bool(node.left, data)
+    return int(left || right)
   case .LogicalNot:
-    left := eval_expression(node.left, data)
-    switch v in left {
-    case int:
-      return int(v == 0)
-    case string:
-      return int(v == "")
-    }
+    left := eval_expression_as_bool(node.left, data)
+    return int(!left)
   case .Name:
     name := node.slice
     value, variable_exists := data.variables[name]
@@ -640,6 +657,16 @@ eval_expression :: proc(node: ^lib.ASTNode, data: ^InterpreterData) -> VariableV
   }
   assertf(false, "Unsupported expression type: %v", TokenType(node.type))
   return 0
+}
+eval_expression_as_bool :: proc(node: ^lib.ASTNode, data: ^InterpreterData) -> bool {
+  value := eval_expression(node, data)
+  switch v in value {
+  case int:
+    return v != 0
+  case string:
+    return v != ""
+  }
+  return false
 }
 run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
   walk_ast_lines(
