@@ -78,3 +78,6 @@ test-os:
   echo "OS_UNIX: $$OS_UNIX"
   OS_NOT_WINDOWS :: !OS_WINDOWS
   echo "OS_NOT_WINDOWS: $$OS_NOT_WINDOWS"
+  if (OS_WINDOWS) echo "Windows!"
+  if (OS_LINUX) echo "Linux!"
+  if (!OS_WINDOWS) echo "Not Windows!"

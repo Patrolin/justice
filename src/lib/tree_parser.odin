@@ -5,6 +5,7 @@ import "core:strings"
 TokenType :: int
 OpType :: enum {
   Binary = 0,
+  BinarySuffix,
   Ignore,
   Value,
   Unary,
@@ -62,10 +63,12 @@ _parse_recursively :: proc(
 ) -> (
   prev_node: ^ASTNode,
 ) {
-  unary_tail := prev_node
-  unary_tail_is_value := false
+  binary_tail: ^ASTNode
+  unary_tail: ^ASTNode
+  tail_is_value := false
   for parser.keep_going {
     token, op_type, precedence, right_associative := parser.parser_proc(parser, prev_node, parent_node)
+    //fmt.printfln("token: %v, %v, %v, parent_node: %v", token, op_type, precedence, parent_node != nil ? parent_node.token : Token{})
     if len(token.slice) == 0 || !parser.keep_going {
       report_parser_error(parser, fmt.tprintf("Cannot have token of length 0: %v", token))
       return
@@ -79,11 +82,21 @@ _parse_recursively :: proc(
       node.left = prev_node
       node.right = _parse_recursively(parser, precedence, node, allocator = allocator)
       prev_node = node
-      unary_tail_is_value = true
+      binary_tail = nil
+      unary_tail = nil
+      tail_is_value = true
+    case OpType.BinarySuffix:
+      _parser_eat_token(parser, token)
+      node := new(ASTNode, allocator = allocator)
+      node.token = token
+      prev_node = node
+      binary_tail = node
+      unary_tail = nil
+      tail_is_value = false
     case OpType.Ignore:
       _parser_eat_token(parser, token)
     case OpType.Value, OpType.Unary, OpType.LeftBracket:
-      if unary_tail_is_value {
+      if tail_is_value {
         report_parser_error(parser, fmt.tprintf("Cannot have two values in a row: %v, %v", prev_node.token, token))
         return
       }
@@ -91,11 +104,14 @@ _parse_recursively :: proc(
       node: ^ASTNode = ---
       if op_type == .LeftBracket {
         // left bracket
+        fake_parent := ASTNode {
+          token = token,
+        }
         parser.bracket_count += 1
-        node = _parse_recursively(parser, -1, nil, allocator = allocator)
+        node = _parse_recursively(parser, -1, &fake_parent, allocator = allocator)
         // right bracket
         next_token, next_op_type, _, _ := parser.parser_proc(parser, prev_node, parent_node)
-        if next_op_type != .RightBracket {
+        if next_op_type != .RightBracket || next_token.user_data != token.user_data {
           report_parser_error(parser, "Unclosed left bracket")
           return
         }
@@ -105,9 +121,23 @@ _parse_recursively :: proc(
         node = new(ASTNode, allocator = allocator)
         node.token = token
       }
-      if prev_node == nil {prev_node = node} else {unary_tail.left = node}
-      unary_tail = node
-      unary_tail_is_value = op_type != .Unary
+      if prev_node == nil {prev_node = node}
+      if binary_tail != nil {
+        if binary_tail.left == nil {
+          binary_tail.left = node
+        } else {
+          binary_tail.right = node
+          binary_tail = nil
+          tail_is_value = true
+        }
+      } else {
+        if unary_tail != nil {
+          unary_tail.left = node
+        } else {
+          unary_tail = node
+        }
+        tail_is_value = op_type != .Unary
+      }
     case OpType.RightBracket:
       if parser.bracket_count == 0 {
         report_parser_error(parser, "Unclosed right bracket")

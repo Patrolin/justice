@@ -18,6 +18,7 @@ TokenType :: enum {
   Runnable,
   DeclareConstant,
   DeclareAssignment,
+  IfStatement,
   BitAnd,
   Plus,
   Minus,
@@ -27,11 +28,12 @@ TokenType :: enum {
   String,
   Name,
   Command,
-  // unary ops
-  LogicalNot,
+  OptionalCommand,
   // brackets
   LeftBracket,
   RightBracket,
+  // unary ops
+  LogicalNot,
   // ignore
   Whitespace,
   SingleLineComment,
@@ -133,9 +135,10 @@ escape_shell_characters_for_single_quoted_string :: proc(sb: ^strings.Builder, v
   }
 }
 parent_node_is_expression :: proc(parent_node: ^lib.ASTNode) -> bool {
+  //fmt.printfln("parent_node: %v", parent_node)
   if parent_node == nil {return false}
   #partial switch TokenType(parent_node.type) {
-  case .DeclareConstant, .DeclareAssignment, .BitAnd, .Plus, .Minus, .BitOr:
+  case .DeclareConstant, .DeclareAssignment, .BitAnd, .Plus, .Minus, .BitOr, .LogicalNot, .LeftBracket:
     return true
   case:
     return false
@@ -152,6 +155,10 @@ parse_ice :: proc(
   right_associative: bool,
 ) {
   i := parser.start
+  if i >= len(parser.str) {
+    lib.report_parser_error(parser, "Reached end of file")
+    return
+  }
   // parse statement
   first_char := parser.str[i]
   switch first_char {
@@ -194,6 +201,16 @@ parse_ice :: proc(
     string_slice^ = string_value
     token.user_data = uintptr(string_slice)
     op_type = lib.OpType.Value
+  case '(':
+    token.slice = parser.str[i:i + 1]
+    token.type = int(TokenType.LeftBracket)
+    token.user_data = 0
+    op_type = lib.OpType.LeftBracket
+  case ')':
+    token.slice = parser.str[i:i + 1]
+    token.type = int(TokenType.RightBracket)
+    token.user_data = 0
+    op_type = lib.OpType.RightBracket
   case '$', 'A' ..= 'Z', '_', 'a' ..= 'z':
     // parse value
     if parent_node_is_expression(parent_node) {
@@ -204,18 +221,20 @@ parse_ice :: proc(
       return
     }
     // parse runnable
-    j := lib.index_after_ascii(parser.str, i, RUNNABLE_CHARS)
-    if parser.str[j - 1] == ':' {
-      token.user_data = uintptr((j - 1) - i)
-      j = lib.index_after_newline(parser.str, j)
-      token.slice = parser.str[i:j]
-      token.type = int(TokenType.Runnable)
-      precedence = 1
-      right_associative = true
-      break
+    if prev_node == nil || TokenType(prev_node.type) == .Newline {
+      j := lib.index_after_ascii(parser.str, i, RUNNABLE_CHARS)
+      if parser.str[j - 1] == ':' {
+        token.user_data = uintptr((j - 1) - i)
+        j = lib.index_after_newline(parser.str, j)
+        token.slice = parser.str[i:j]
+        token.type = int(TokenType.Runnable)
+        precedence = 1
+        right_associative = true
+        break
+      }
     }
     /* NOTE: most linux shells only allow `[A-Z_a-z][0-9A-Z_a-z]*` */
-    j = lib.index_after_ascii(parser.str, i, VARIABLE_CHARS)
+    j := lib.index_after_ascii(parser.str, i, VARIABLE_CHARS)
     token.slice = parser.str[i:j]
     if j < len(parser.str) {
       switch parser.str[j] {
@@ -234,11 +253,15 @@ parse_ice :: proc(
     // else parse command
     j = lib.index_newline(parser.str, j)
     token.slice = parser.str[i:j]
-    token.type = int(TokenType.Command)
-    if lib.starts_with(token.slice, "? ") {
-      token.user_data = 1
+    if lib.starts_with(token.slice, "if ") || lib.starts_with(token.slice, "if(") {
+      token.slice = parser.str[i:i + 2]
+      token.type = int(TokenType.IfStatement)
+      op_type = lib.OpType.BinarySuffix
+      precedence = 9
+    } else {
+      token.type = int(TokenType.Command)
+      op_type = lib.OpType.Value
     }
-    op_type = lib.OpType.Value
     return
   case '\n', '\r':
     j := lib.index_after_newlines(parser.str, i)
@@ -285,10 +308,12 @@ parse_ice :: proc(
     if prev_node == nil {
       j := lib.index_newline(parser.str, i)
       token.slice = parser.str[i:j]
-      token.type = int(TokenType.Command)
-      op_type = lib.OpType.Value
       if lib.starts_with(token.slice, "? ") {
-        token.user_data = 1
+        token.type = int(TokenType.OptionalCommand)
+        op_type = lib.OpType.Value
+      } else {
+        token.type = int(TokenType.Command)
+        op_type = lib.OpType.Value
       }
     } else {
       lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
@@ -600,24 +625,28 @@ eval_expression :: proc(node: ^lib.ASTNode, data: ^InterpreterData) -> VariableV
     assertf(left_is_int && right_is_int, "Unsupported operator - between %v and %v", left, right)
     return left - right
   case .LogicalNot:
-    left, left_is_int := eval_expression(node.left, data).(int)
-    assertf(left_is_int, "Unsupported operator ! for %v", left)
-    return int(left == 0)
+    left := eval_expression(node.left, data)
+    switch v in left {
+    case int:
+      return int(v == 0)
+    case string:
+      return int(v == "")
+    }
   case .Name:
     name := node.slice
     value, variable_exists := data.variables[name]
     assertf(variable_exists, "Variable is not defined: %v", name)
     return value.value
-  case:
-    assertf(false, "Unsupported expression type: %v", TokenType(node.type))
-    return 0
   }
+  assertf(false, "Unsupported expression type: %v", TokenType(node.type))
+  return 0
 }
 run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
   walk_ast_lines(
     parent,
     data,
     proc(node: ^lib.ASTNode, user_data: rawptr) {
+      node := node
       data := (^InterpreterData)(user_data)
       variable_readonly := false
       #partial switch TokenType(node.type) {
@@ -639,8 +668,26 @@ run_interpreter :: proc(parent: ^lib.ASTNode, data: ^InterpreterData) {
         case string:
           data.variables[name] = {variable_readonly, expand_string(v, data.variables)}
         }
-      case .Command:
-        is_optional := node.user_data != 0
+      case .IfStatement:
+        condition_value := eval_expression(node.left, data)
+        condition: bool
+        switch v in condition_value {
+        case int:
+          condition = v != 0
+        case string:
+          condition = v != ""
+        }
+        if !condition {return}
+        then_statement := node.right
+        assertf(
+          TokenType(then_statement.type) == .Command || TokenType(then_statement.type) == .OptionalCommand,
+          "Unsupported then statement type: %v",
+          then_statement,
+        )
+        node = node.right
+        fallthrough
+      case .Command, .OptionalCommand:
+        is_optional := TokenType(node.type) == .OptionalCommand
         command := is_optional ? node.slice[2:] : node.slice
         command = expand_string(command, data.variables)
         // run the command
