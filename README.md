@@ -43,7 +43,6 @@ bar:                // declare a runnable
 ```
 
 ## Todo list (do we need any of these?)
-- `if` conditions
 - Print error line on error
 - builtin `EXE(string)` -> add ".exe" suffix on windows?
 - `params()` builtin for bools
