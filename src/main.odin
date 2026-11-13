@@ -396,6 +396,9 @@ main :: proc() {
       selected_runnable_name = next_arg
       arg_i += 1
       continue
+    } else if next_arg == "--" {
+      arg_i += 1
+      break
     } else {
       assertf(false, "Unknown arg: %v", next_arg)
     }
