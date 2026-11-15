@@ -29,6 +29,15 @@ test-variable:
   echo "$$x"
 test-unicode:
   echo "á"
+test-int:
+  $FOO := 0
+  echo "$FOO"
+  $FOO := 1
+  echo "$FOO"
+  $BAR :: 123
+  echo "$BAR"
+  $BAZ :: -123
+  echo "$BAZ"
 test-string:
   // parsing
   FOO := "evaluate\nescapes"

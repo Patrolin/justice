@@ -48,6 +48,26 @@ when ODIN_OS == .Windows {
   VARIABLE_CHARS :: "$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 }
 VARIABLE_CONTINUE_CHARS :: VARIABLE_CHARS[1:]
+parse_int :: proc(src: string, i: int) -> (i64, int) {
+  value: i64
+  negative := false
+  j := i
+  if j < len(src) && src[j] == '-' {
+    negative = true
+    j += 1
+  }
+  for j < len(src) && src[j] >= '0' && src[j] <= '9' {
+    digit := i64(src[j] - '0')
+    value = value * 10 + digit
+    j += 1
+  }
+  if negative {
+    if j == i + 1 {return 0, i}
+    return -value, j
+  } else {
+    return value, j
+  }
+}
 /* Parse string and keep escape characters */
 parse_string_keep_escaped :: proc(src: string, i: int) -> (string, int) {
   i := i
@@ -185,9 +205,10 @@ parse_ice :: proc(
       lib.report_parser_error(parser, fmt.tprintf("'%v' not implemented yet.", rune(first_char)))
     }
   case '0' ..= '9':
-    j := lib.index_after_ascii(parser.str, i, "0123456789")
+    value, j := parse_int(parser.str, i)
     token.slice = parser.str[i:j]
     token.type = int(TokenType.Int)
+    token.user_data = uintptr(value)
     op_type = lib.OpType.Value
   case '"', '\'':
     string_value: string
@@ -300,9 +321,17 @@ parse_ice :: proc(
     token.type = int(TokenType.Plus)
     precedence = 16
   case '-':
-    token.slice = parser.str[i:i + 1]
-    token.type = int(TokenType.Minus)
-    precedence = 16
+    value, j := parse_int(parser.str, i)
+    if j != i {
+      token.slice = parser.str[i:j]
+      token.type = int(TokenType.Int)
+      token.user_data = uintptr(value)
+      op_type = lib.OpType.Value
+    } else {
+      token.slice = parser.str[i:i + 1]
+      token.type = int(TokenType.Minus)
+      precedence = 16
+    }
   case '|':
     if i + 1 < len(parser.str) && parser.str[i + 1] == '|' {
       token.slice = parser.str[i:i + 2]
