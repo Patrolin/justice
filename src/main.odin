@@ -378,6 +378,7 @@ assertf :: proc(condition: bool, format: string, args: ..any, loc := #caller_loc
 InterpreterData :: struct {
   variables:         Variables,
   working_directory: string,
+  terminal:          ShellType,
 }
 Variables :: map[string]Variable
 Variable :: struct {
@@ -445,6 +446,11 @@ main :: proc() {
   data.variables["OS_MAC"] = Variable{true, ODIN_OS == .Darwin ? 1 : 0}
   OS_IS_BSD :: ODIN_OS == .FreeBSD || ODIN_OS == .OpenBSD || ODIN_OS == .NetBSD
   data.variables["OS_BSD"] = Variable{true, OS_IS_BSD ? 1 : 0}
+  // get terminal
+  data.terminal = get_shell_type()
+  data.variables["TERM_POWERSHELL1"] = Variable{true, int(data.terminal == .Powershell1)}
+  data.variables["TERM_POWERSHELL2"] = Variable{true, int(data.terminal == .Powershell2)}
+  data.variables["TERM_SH"] = Variable{true, int(data.terminal == .Sh)}
   // add environment variables
   default_env, default_env_err := os.environ(context.temp_allocator)
   fmt.assertf(default_env_err == nil, "Failed to get environment")

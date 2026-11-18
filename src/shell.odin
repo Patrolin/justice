@@ -4,6 +4,28 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
+ShellType :: enum {
+  Powershell1,
+  Powershell2,
+  Sh,
+}
+@(private = "file")
+_can_create_shell :: proc(command: []string) -> bool {
+  _, process_create_err := os.process_start({command = command})
+  return process_create_err == nil
+}
+get_shell_type :: proc() -> ShellType {
+  when ODIN_OS == .Windows {
+    if _can_create_shell([]string{"pwsh", "-v"}) {
+      return .Powershell2
+    }
+    return .Powershell1
+  } else {
+    return .Sh
+  }
+}
+
+@(private = "file")
 _build_environment_block :: proc(environment: []string, allocator: runtime.Allocator) -> string {
   builder := strings.builder_make(allocator)
   loop: #reverse for kv, cur_idx in environment {
@@ -33,10 +55,14 @@ execute_command :: proc(command: string, is_optional: bool, data: ^InterpreterDa
       append(&env, fmt.tprintf("%v=%v", key[1:], variable.value))
     }
   }
-  when ODIN_OS == .Windows {
-    full_command := []string{"powershell", "-Command", command}
-  } else {
-    full_command := []string{"sh", "-c", command}
+  full_command: []string
+  switch data.terminal {
+  case .Powershell1:
+    full_command = []string{"powershell", "-Command", command}
+  case .Powershell2:
+    full_command = []string{"pwsh", "-c", command}
+  case .Sh:
+    full_command = []string{"sh", "-c", command}
   }
   process, process_create_err := os.process_start({
     command     = full_command,

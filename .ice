@@ -90,3 +90,7 @@ test-os:
   if (OS_WINDOWS) echo "Windows!"
   if (OS_LINUX) echo "Linux!"
   if (!OS_WINDOWS) echo "Not Windows!"
+test-terminal:
+  if (TERM_POWERSHELL1) echo "Powershell v1"
+  if (TERM_POWERSHELL2) echo "Powershell v2"
+  if (TERM_SH) echo "sh"

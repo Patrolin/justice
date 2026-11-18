@@ -41,6 +41,7 @@ bar:                // declare a runnable
   echo "$$$"VAR = '$$"VAR_ESCAPED'" // print name and value and escape for outer " string
   if (OS_WINDOWS) echo "Windows!"   // execute command only on Windows
   if (OS_LINUX) echo "Linux!"       // execute command only on Linux
+  if (TERM_POWERSHELL2) echo "Powershell 2!" // execute command only if user has powershell 2 (`pwsh`)
 ```
 
 ## Todo list (do we need any of these?)
